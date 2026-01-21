@@ -35,7 +35,9 @@ jobs:
     steps:
       # Runs a single command using the runners shell
       - name: checkout cef
-        run: cd /d %~d0\
+        shell: cmd
+        run: |
+             cd /d %~d0\
              mkdir code\automate code\chromium_git
              powershell -Command "Invoke-WebRequest -Uri 'https://storage.googleapis.com/chrome-infra/depot_tools.zip' -OutFile 'code\depot_tools.zip'"
              powershell -Command "Expand-Archive -Path 'code\depot_tools.zip' -DestinationPath 'code\depot_tools' -Force"
