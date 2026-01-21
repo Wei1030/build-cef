@@ -42,6 +42,10 @@ jobs:
              powershell -Command "Invoke-WebRequest -Uri 'https://storage.googleapis.com/chrome-infra/depot_tools.zip' -OutFile 'code\depot_tools.zip'"
              powershell -Command "Expand-Archive -Path 'code\depot_tools.zip' -DestinationPath 'code\depot_tools' -Force"
              cd code\depot_tools
+             git config --global core.autocrlf false
+             git config --global core.filemode false
+             git config --global core.fscache true
+             git config --global core.preloadindex true
              update_depot_tools.bat
              set PATH=%CD%;%PATH%
              cd ..
