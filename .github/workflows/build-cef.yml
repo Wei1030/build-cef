@@ -34,10 +34,21 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - name: checkout
+      - name: Checkout
         uses: actions/checkout@v4
         
-      - name: checkout cef
+      - name: Cache
+        id: cache
+        uses: actions/cache@v4
+        with: 
+          path: |
+            automate
+            depot_tools            
+          key: cef-toolchain
+          
+      - name: Download cef-toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
         shell: cmd
-        run: build.bat
+        run: download.bat
+        
              
