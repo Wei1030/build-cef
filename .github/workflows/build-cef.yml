@@ -51,4 +51,8 @@ jobs:
         shell: cmd
         run: download.bat
         
+      - name: Checkout Cef
+        shell: cmd
+        run: checkout.bat
+        
              
