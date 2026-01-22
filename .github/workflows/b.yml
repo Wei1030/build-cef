@@ -31,12 +31,14 @@ jobs:
           path: |
             ./automate
             ./depot_tools
-            ./chromium_git
-          key: cef-${{ env.CEF_BRANCH }}-${{ runner.os }}
+          key: cef-depot_tools-${{ runner.os }}
           
       - name: Download cef
         if: steps.cache.outputs.cache-hit != 'true'
-        run: ./download.sh ${{ env.CEF_BRANCH }}
+        run: ./download.sh
+      
+      - name: Build Cef
+        run: ./build.sh ${{ env.CEF_BRANCH }}
       
   build-on-windows:
     # The type of runner that the job will run on
@@ -55,13 +57,12 @@ jobs:
           path: |
             automate
             depot_tools
-            chromium_git
-          key: cef-${{ env.CEF_BRANCH }}-${{ runner.os }}
+          key: cef-depot_tools-${{ runner.os }}
           
       - name: Download cef
         if: steps.cache.outputs.cache-hit != 'true'
         shell: cmd
-        run: download.bat ${{ env.CEF_BRANCH }}
+        run: download.bat
         
       - name: Build Cef
         shell: cmd

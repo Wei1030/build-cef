@@ -6,13 +6,7 @@ name: I
 on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-    inputs:
-        cef_branch: 
-            description: 'cef_branch'
-            required: false
-            default: '5414'
-env:
-  CEF_BRANCH: ${{ github.event.inputs.cef_branch }}
+  
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   init-on-ubuntu:
@@ -31,12 +25,11 @@ jobs:
           path: |
             ./automate
             ./depot_tools
-            ./chromium_git
-          key: cef-${{ env.CEF_BRANCH }}-${{ runner.os }}
+          key: cef-depot_tools-${{ runner.os }}
           
       - name: Download cef
         if: steps.cache.outputs.cache-hit != 'true'
-        run: ./download.sh ${{ env.CEF_BRANCH }}
+        run: ./download.sh
       
   init-on-windows:
     # The type of runner that the job will run on
@@ -55,12 +48,11 @@ jobs:
           path: |
             automate
             depot_tools
-            chromium_git
-          key: cef-${{ env.CEF_BRANCH }}-${{ runner.os }}
+          key: cef-depot_tools-${{ runner.os }}
           
       - name: Download cef
         if: steps.cache.outputs.cache-hit != 'true'
         shell: cmd
-        run: download.bat ${{ env.CEF_BRANCH }}
+        run: download.bat
         
              
