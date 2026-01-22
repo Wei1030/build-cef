@@ -35,10 +35,14 @@ jobs:
           
       - name: Download cef
         if: steps.cache.outputs.cache-hit != 'true'
-        run: ./download.sh
+        run: |
+            chmod 777 ./download.sh
+            ./download.sh
       
       - name: Build Cef
-        run: ./build.sh ${{ env.CEF_BRANCH }}
+        run: |
+            chmod 777 ./build.sh
+            ./build.sh ${{ env.CEF_BRANCH }}
       
   build-on-windows:
     # The type of runner that the job will run on
