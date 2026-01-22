@@ -13,7 +13,7 @@ git config --global core.filemode false
 git config --global core.fscache true
 git config --global core.preloadindex true
 echo start update_depot_tools, current path: %CD%
-update_depot_tools.bat
+cmd /c update_depot_tools.bat
 set PATH=%CD%;%PATH%
 echo update_depot_tools end.
 
