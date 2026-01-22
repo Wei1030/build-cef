@@ -29,14 +29,14 @@ jobs:
         uses: actions/cache@v4
         with: 
           path: |
-            automate
-            depot_tools
-            chromium_git
+            ./automate
+            ./depot_tools
+            ./chromium_git
           key: cef-${{ env.CEF_BRANCH }}-${{ runner.os }}
           
       - name: Download cef
         if: steps.cache.outputs.cache-hit != 'true'
-        run: download.sh ${{ env.CEF_BRANCH }}
+        run: ./download.sh ${{ env.CEF_BRANCH }}
       
   init-on-windows:
     # The type of runner that the job will run on

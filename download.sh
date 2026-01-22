@@ -22,7 +22,7 @@ cd $SCRIPT_DIR/automate
 wget https://bitbucket.org/chromiumembedded/cef/raw/master/tools/automate/automate-git.py
 
 cd $SCRIPT_DIR/chromium_git
-python3 ../automate/automate-git.py --download-dir=$SCRIPT_DIR/chromium_git --depot-tools-dir=$SCRIPT_DIR/depot_tools --branch=$CEF_BRANCH --no-depot-tools-update --no-chromium-history --no-distrib --no-build
+python3 ../automate/automate-git.py --download-dir=$SCRIPT_DIR/chromium_git --depot-tools-dir=$SCRIPT_DIR/depot_tools --branch=$CEF_BRANCH --no-chromium-history --no-distrib --no-build
 
 
 

@@ -10,9 +10,8 @@ git config --global core.preloadindex true
 set PATH=%SCRIPT_PATH%depot_tools\;%PATH%
 
 cd %SCRIPT_PATH%chromium_git
-echo call automate-git.py, current path: %CD%
-python3 ..\automate\automate-git.py --download-dir=%SCRIPT_PATH%chromium_git --depot-tools-dir=%SCRIPT_PATH%depot_tools --branch=%CEF_BRANCH% --force-clean --no-update --no-depot-tools-update --no-chromium-history --no-distrib --no-build
-echo automate-git.py end.
+python3 ..\automate\automate-git.py --download-dir=%SCRIPT_PATH%chromium_git --depot-tools-dir=%SCRIPT_PATH%depot_tools --branch=%CEF_BRANCH% --no-update --no-depot-tools-update --no-chromium-history --no-distrib --no-build
+
 
 cd %SCRIPT_PATH%chromium_git\chromium\src\cef
 set GN_DEFINES=proprietary_codecs=true ffmpeg_branding=Chrome is_official_build=true is_debug=false symbol_level=0 enable_nacl=false
