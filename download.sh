@@ -11,7 +11,5 @@ python3 -m pip install dataclasses importlib_metadata
 git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
 mkdir $SCRIPT_DIR/automate
 cd $SCRIPT_DIR/automate
-wget https://bitbucket.org/chromiumembedded/cef/raw/master/tools/automate/automate-git.py
-
-
+curl -fSL -o automate-git.py "https://bitbucket.org/chromiumembedded/cef/raw/master/tools/automate/automate-git.py"
 
