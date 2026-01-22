@@ -43,16 +43,17 @@ jobs:
         with: 
           path: |
             automate
-            depot_tools            
-          key: cef-toolchain
+            depot_tools
+            chromium_git
+          key: cef-${{ env.CEF_BRANCH }}-${{ runner.os }}
           
-      - name: Download cef-toolchain
+      - name: Download cef
         if: steps.cache.outputs.cache-hit != 'true'
         shell: cmd
-        run: download.bat
+        run: download.bat ${{ env.CEF_BRANCH }}
         
-      - name: Checkout Cef
+      - name: Build Cef
         shell: cmd
-        run: checkout.bat
+        run: build.bat ${{ env.CEF_BRANCH }}
         
              
