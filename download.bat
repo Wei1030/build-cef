@@ -14,15 +14,10 @@ git config --global core.autocrlf false
 git config --global core.filemode false
 git config --global core.fscache true
 git config --global core.preloadindex true
-echo start update_depot_tools, current path: %CD%
 cmd /c update_depot_tools.bat
 set PATH=%CD%;%PATH%
-echo update_depot_tools end.
 
 
 mkdir %SCRIPT_PATH%chromium_git
 cd %SCRIPT_PATH%chromium_git
-echo call automate-git.py, current path: %CD%
 python3 ..\automate\automate-git.py --download-dir=%SCRIPT_PATH%chromium_git --depot-tools-dir=%SCRIPT_PATH%depot_tools --branch=%CEF_BRANCH% --no-depot-tools-update --no-chromium-history --no-distrib --no-build
-echo automate-git.py end.
-
