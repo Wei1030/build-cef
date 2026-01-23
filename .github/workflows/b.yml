@@ -46,7 +46,7 @@ jobs:
         shell: pwsh
         run: |
             Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2164145" -OutFile ".\winsdksetup.exe"
-            Start-Process -FilePath ".\winsdksetup.exe" -ArgumentList "/quiet /norestart /ceip off /features OptionId.WindowsDesktopDebuggers" -Wait
+            Start-Process -FilePath ".\winsdksetup.exe" -ArgumentList "/quiet /norestart /ceip off /features OptionId.WindowsDesktopDebuggers OptionId.DesktopCPPx86 OptionId.DesktopCPPx64" -Wait
             Remove-Item ".\winsdksetup.exe" -Force
         
       - name: PrepareEnv
