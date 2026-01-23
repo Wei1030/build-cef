@@ -42,6 +42,13 @@ jobs:
         shell: cmd
         run: download.bat
         
+      - name: Install Debugging Tools for Windows
+        shell: pwsh
+        run: |
+            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2164145" -OutFile ".\winsdksetup.exe"
+            Start-Process -FilePath ".\winsdksetup.exe" -ArgumentList "/quiet /norestart /ceip off /features OptionId.WindowsDesktopDebuggers" -Wait
+            Remove-Item ".\winsdksetup.exe" -Force
+        
       - name: PrepareEnv
         shell: cmd
         run: prepare.bat ${{ env.CEF_BRANCH }}
