@@ -53,6 +53,10 @@ jobs:
         shell: cmd
         run: prepare.bat ${{ env.CEF_BRANCH }}
         
+      - name: Create Project
+        shell: cmd
+        run: create_project.bat
+        
       - name: Build
         shell: cmd
         run: build.bat
