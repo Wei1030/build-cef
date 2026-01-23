@@ -61,19 +61,13 @@ jobs:
           body_path: release.txt
           files: release.txt
           
-      - name: Delete workflow runs
-        uses: GitRML/delete-workflow-runs@main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Delete releases and workflows runs
+        uses: ophub/delete-releases-workflows@main
         with:
-          retain_days: 1
-          keep_minimum_runs: 3
-
-      - name: Remove old Releases
-        uses: dev-drprasad/delete-older-releases@v0.3.4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          keep_latest: 3
+          delete_releases: true
+          releases_keep_latest: 3
           delete_tags: true
+          delete_workflows: true
+          workflows_keep_day: 10
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
           
