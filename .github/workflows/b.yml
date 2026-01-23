@@ -80,7 +80,7 @@ jobs:
         shell: powershell
         run: |
          Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.CLANG_VERSION }}/LLVM-${{ env.CLANG_VERSION }}-win64.exe" -OutFile "llvm.exe"
-         Start-Process -FilePath .\llvm.exe -ArgumentList "/S", "/D=${{ env.GITHUB_WORKSPACE }}\LLVM" -Wait
+         Start-Process -FilePath .\llvm.exe -ArgumentList "/S", "/D=$GITHUB_WORKSPACE\LLVM" -Wait
          Remove-Item ".\llvm.exe" -Force
         
       - name: PrepareEnv
