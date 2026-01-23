@@ -60,20 +60,20 @@ jobs:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           body_path: release.txt
           files: release.txt
-          token: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Delete workflow runs
         uses: GitRML/delete-workflow-runs@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           retain_days: 1
           keep_minimum_runs: 3
 
       - name: Remove old Releases
         uses: dev-drprasad/delete-older-releases@v0.3.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           keep_latest: 3
           delete_tags: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-             
+          
