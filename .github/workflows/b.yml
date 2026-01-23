@@ -11,8 +11,6 @@ on:
             description: 'cef_branch'
             required: false
             default: '5414'
-permissions:
-  contents: write
   
 env:
   CEF_BRANCH: ${{ github.event.inputs.cef_branch }}
