@@ -46,7 +46,7 @@ jobs:
         shell: pwsh
         run: |
             $releaseTag = Get-Date -Format "yyyy.MM.dd-HHmm"
-            echo "release_tag=${{ env.CEF_BRANCH }} >> $env:GITHUB_OUTPUT
+            echo "release_tag=${{ env.CEF_BRANCH }}" >> $env:GITHUB_OUTPUT
             Set-Content -Path release.txt -Value "${{ env.CEF_BRANCH }} $releaseTag"
 
       - name: Upload to release
