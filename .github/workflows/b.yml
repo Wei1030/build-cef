@@ -42,7 +42,17 @@ jobs:
         shell: cmd
         run: download.bat
         
-      
+      - name: PrepareEnv
+        shell: cmd
+        run: prepare.bat ${{ env.CEF_BRANCH }}
+        
+      - name: Build
+        shell: cmd
+        run: build.bat
+        
+      - name: Package
+        shell: cmd
+        run: package.bat
         
       - name: Generate release tag
         id: tag
@@ -57,7 +67,7 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           body_path: release.txt
-          files: release.txt
+          files: ./output/*
           
       - name: Delete workflow runs
         if: always()
