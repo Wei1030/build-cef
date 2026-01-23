@@ -11,6 +11,6 @@ set PATH=%SCRIPT_PATH%depot_tools\;%PATH%
 cd %SCRIPT_PATH%chromium_git\chromium\src\cef
 set GN_DEFINES=proprietary_codecs=true ffmpeg_branding=Chrome is_official_build=true is_debug=false symbol_level=0 enable_nacl=false
 set GN_ARGUMENTS=--ide=vs2022 --sln=cef --filters=//cef/*
-cmd /c cef_create_projects.bat
+python3.bat tools\gclient_hook.py
 cd %SCRIPT_PATH%chromium_git\chromium\src
 autoninja -C out\Release_GN_x86 cef
