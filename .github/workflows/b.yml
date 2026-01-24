@@ -61,7 +61,8 @@ jobs:
       - name: Install vs2019
         shell: pwsh
         run: |
-            Start-Process -FilePath ".\installer\vs_community.exe" -ArgumentList "--add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.ATLMFC --includeRecommended --quiet --norestart" -Wait
+            ([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+            Start-Process -FilePath ".\installer\vs_community.exe" -ArgumentList "--add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.ATLMFC --includeRecommended --quiet --noUpdateInstaller --norestart" -Wait
 
       - name: Install WinSDK with Debugging Tools
         shell: pwsh
