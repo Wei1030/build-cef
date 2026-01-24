@@ -6,6 +6,7 @@ cd %SCRIPT_PATH%chromium_git\chromium\src\third_party\ffmpeg
 git apply %SCRIPT_PATH%add-hevc-ffmpeg-decoder-parser.patch
 
 cd %SCRIPT_PATH%chromium_git\chromium\src
+git apply %SCRIPT_PATH%fix-webui_module_path.patch
 git apply %SCRIPT_PATH%remove-main-main10-profile-limit.patch
 
 set PATH=%SCRIPT_PATH%depot_tools\;%PATH%
