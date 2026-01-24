@@ -11,14 +11,9 @@ on:
             description: 'cef_branch'
             required: false
             default: '5414'
-        clang_version:
-            description: 'clang_version'
-            required: false
-            default: '19.1.7'
   
 env:
   CEF_BRANCH: ${{ github.event.inputs.cef_branch }}
-  CLANG_VERSION: ${{ github.event.inputs.clang_version }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
@@ -47,42 +42,32 @@ jobs:
         shell: cmd
         run: download.bat
         
-      - name: Cache winsdksetup
-        id: cache_winsdksetup
+      - name: Cache Installer
+        id: cache_installer
         uses: actions/cache@v4
         with: 
           path: |
-            setup
-          key: setup-${{ runner.os }}
+            installer
+          key: installer-${{ runner.os }}
           
-      - name: Download winsdksetup
-        if: steps.cache_winsdksetup.outputs.cache-hit != 'true'
+      - name: Download Installer
+        if: steps.cache_installer.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-            mkdir .\setup
-            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2164145" -OutFile ".\setup\winsdksetup.exe"
-        
+            mkdir .\installer
+            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2164145" -OutFile ".\installer\winsdksetup.exe"
+            Invoke-WebRequest -Uri "https://aka.ms/vs/16/release/vs_community.exe" -OutFile ".\installer\vs_community.exe"
+            
+      - name: Install vs2019
+        shell: pwsh
+        run: |
+            Start-Process -FilePath ".\installer\vs_community.exe" -ArgumentList "--add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.ATLMFC --includeRecommended --quiet --norestart" -Wait
+
       - name: Install WinSDK with Debugging Tools
         shell: pwsh
         run: |
-            Start-Process -FilePath ".\setup\winsdksetup.exe" -ArgumentList "/quiet /norestart /ceip off /features OptionId.WindowsDesktopDebuggers OptionId.DesktopCPPx86 OptionId.DesktopCPPx64" -Wait
-      
-      - name: Cache Clang
-        id: cache_clang
-        uses: actions/cache@v4
-        with: 
-          path: |
-            LLVM
-          key: LLVM-${{ env.CLANG_VERSION }}-${{ runner.os }}
-          
-      - name: Install LLVM Clang
-        if: steps.cache_clang.outputs.cache-hit != 'true'
-        shell: powershell
-        run: |
-         Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.CLANG_VERSION }}/LLVM-${{ env.CLANG_VERSION }}-win64.exe" -OutFile "llvm.exe"
-         Start-Process -FilePath .\llvm.exe -ArgumentList "/S", "/D=${{ github.workspace }}\LLVM" -Wait
-         Remove-Item ".\llvm.exe" -Force
-        
+            Start-Process -FilePath ".\installer\winsdksetup.exe" -ArgumentList "/quiet /norestart /ceip off /features OptionId.WindowsDesktopDebuggers OptionId.DesktopCPPx86 OptionId.DesktopCPPx64" -Wait
+
       - name: PrepareEnv
         shell: cmd
         run: prepare.bat ${{ env.CEF_BRANCH }}

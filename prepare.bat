@@ -9,8 +9,7 @@ git config --global core.preloadindex true
 
 cd %SCRIPT_PATH%depot_tools
 cmd /c update_depot_tools.bat
-set PATH=%SCRIPT_PATH%LLVM\bin;%SCRIPT_PATH%depot_tools\;%PATH%
-clang --version
+set PATH=%SCRIPT_PATH%depot_tools\;%PATH%
 
 mkdir %SCRIPT_PATH%chromium_git
 cd %SCRIPT_PATH%chromium_git
