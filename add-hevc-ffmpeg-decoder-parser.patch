@@ -1,0 +1,3990 @@
+ chromium/config/Chrome/android/arm-neon/config.h   |  6 +--
+ .../Chrome/android/arm-neon/config_components.h    |  4 +-
+ .../android/arm-neon/libavcodec/codec_list.c       |  1 +
+ .../android/arm-neon/libavcodec/parser_list.c      |  1 +
+ chromium/config/Chrome/android/arm64/config.h      |  6 +--
+ .../Chrome/android/arm64/config_components.h       |  4 +-
+ .../Chrome/android/arm64/libavcodec/codec_list.c   |  1 +
+ .../Chrome/android/arm64/libavcodec/parser_list.c  |  1 +
+ chromium/config/Chrome/android/ia32/config.asm     |  2 +-
+ chromium/config/Chrome/android/ia32/config.h       |  6 +--
+ .../config/Chrome/android/ia32/config_components.h |  4 +-
+ .../Chrome/android/ia32/libavcodec/codec_list.c    |  1 +
+ .../Chrome/android/ia32/libavcodec/parser_list.c   |  1 +
+ chromium/config/Chrome/android/mips64el/config.h   |  8 +--
+ .../android/mips64el/libavcodec/codec_list.c       |  1 +
+ .../android/mips64el/libavcodec/parser_list.c      |  1 +
+ chromium/config/Chrome/android/mipsel/config.h     |  8 +--
+ .../Chrome/android/mipsel/libavcodec/codec_list.c  |  1 +
+ .../Chrome/android/mipsel/libavcodec/parser_list.c |  1 +
+ chromium/config/Chrome/android/x64/config.asm      |  6 +--
+ chromium/config/Chrome/android/x64/config.h        |  6 +--
+ .../config/Chrome/android/x64/config_components.h  |  4 +-
+ .../Chrome/android/x64/libavcodec/codec_list.c     |  1 +
+ .../Chrome/android/x64/libavcodec/parser_list.c    |  1 +
+ chromium/config/Chrome/linux-noasm/x64/config.h    |  6 +--
+ .../Chrome/linux-noasm/x64/config_components.h     |  4 +-
+ .../Chrome/linux-noasm/x64/libavcodec/codec_list.c |  1 +
+ .../linux-noasm/x64/libavcodec/parser_list.c       |  1 +
+ chromium/config/Chrome/linux/arm-neon/config.h     |  6 +--
+ .../Chrome/linux/arm-neon/config_components.h      |  4 +-
+ .../Chrome/linux/arm-neon/libavcodec/codec_list.c  |  1 +
+ .../Chrome/linux/arm-neon/libavcodec/parser_list.c |  1 +
+ chromium/config/Chrome/linux/arm/config.h          |  6 +--
+ .../config/Chrome/linux/arm/config_components.h    |  4 +-
+ .../Chrome/linux/arm/libavcodec/codec_list.c       |  1 +
+ .../Chrome/linux/arm/libavcodec/parser_list.c      |  1 +
+ chromium/config/Chrome/linux/arm64/config.h        |  6 +--
+ .../config/Chrome/linux/arm64/config_components.h  |  4 +-
+ .../Chrome/linux/arm64/libavcodec/codec_list.c     |  1 +
+ .../Chrome/linux/arm64/libavcodec/parser_list.c    |  1 +
+ chromium/config/Chrome/linux/ia32/config.asm       |  6 +--
+ chromium/config/Chrome/linux/ia32/config.h         |  6 +--
+ .../config/Chrome/linux/ia32/config_components.h   |  4 +-
+ .../Chrome/linux/ia32/libavcodec/codec_list.c      |  1 +
+ .../Chrome/linux/ia32/libavcodec/parser_list.c     |  1 +
+ chromium/config/Chrome/linux/x64/config.asm        |  6 +--
+ chromium/config/Chrome/linux/x64/config.h          |  6 +--
+ .../config/Chrome/linux/x64/config_components.h    |  4 +-
+ .../Chrome/linux/x64/libavcodec/codec_list.c       |  1 +
+ .../Chrome/linux/x64/libavcodec/parser_list.c      |  1 +
+ chromium/config/Chrome/mac/arm64/config.h          |  6 +--
+ .../config/Chrome/mac/arm64/config_components.h    |  4 +-
+ .../Chrome/mac/arm64/libavcodec/codec_list.c       |  1 +
+ .../Chrome/mac/arm64/libavcodec/parser_list.c      |  1 +
+ chromium/config/Chrome/mac/x64/config.asm          |  6 +--
+ chromium/config/Chrome/mac/x64/config.h            |  6 +--
+ chromium/config/Chrome/mac/x64/config_components.h |  4 +-
+ .../config/Chrome/mac/x64/libavcodec/codec_list.c  |  1 +
+ .../config/Chrome/mac/x64/libavcodec/parser_list.c |  1 +
+ chromium/config/Chrome/win-msvc/ia32/config.asm    |  4 +-
+ chromium/config/Chrome/win-msvc/ia32/config.h      |  8 +--
+ .../Chrome/win-msvc/ia32/libavcodec/codec_list.c   |  1 +
+ .../Chrome/win-msvc/ia32/libavcodec/parser_list.c  |  1 +
+ chromium/config/Chrome/win-msvc/x64/config.asm     |  4 +-
+ chromium/config/Chrome/win-msvc/x64/config.h       |  8 +--
+ .../Chrome/win-msvc/x64/libavcodec/codec_list.c    |  1 +
+ .../Chrome/win-msvc/x64/libavcodec/parser_list.c   |  1 +
+ chromium/config/Chrome/win/arm64/config.h          |  6 +--
+ .../config/Chrome/win/arm64/config_components.h    |  4 +-
+ .../Chrome/win/arm64/libavcodec/codec_list.c       |  1 +
+ .../Chrome/win/arm64/libavcodec/parser_list.c      |  1 +
+ chromium/config/Chrome/win/ia32/config.asm         |  6 +--
+ chromium/config/Chrome/win/ia32/config.h           |  6 +--
+ .../config/Chrome/win/ia32/config_components.h     |  4 +-
+ .../config/Chrome/win/ia32/libavcodec/codec_list.c |  1 +
+ .../Chrome/win/ia32/libavcodec/parser_list.c       |  1 +
+ chromium/config/Chrome/win/x64/config.asm          |  6 +--
+ chromium/config/Chrome/win/x64/config.h            |  6 +--
+ chromium/config/Chrome/win/x64/config_components.h |  4 +-
+ .../config/Chrome/win/x64/libavcodec/codec_list.c  |  1 +
+ .../config/Chrome/win/x64/libavcodec/parser_list.c |  1 +
+ chromium/config/ChromeOS/linux-noasm/x64/config.h  |  6 +--
+ .../ChromeOS/linux-noasm/x64/config_components.h   |  4 +-
+ .../linux-noasm/x64/libavcodec/codec_list.c        |  1 +
+ .../linux-noasm/x64/libavcodec/parser_list.c       |  1 +
+ chromium/config/ChromeOS/linux/arm-neon/config.h   |  6 +--
+ .../ChromeOS/linux/arm-neon/config_components.h    |  4 +-
+ .../linux/arm-neon/libavcodec/codec_list.c         |  1 +
+ .../linux/arm-neon/libavcodec/parser_list.c        |  1 +
+ chromium/config/ChromeOS/linux/arm/config.h        |  6 +--
+ .../config/ChromeOS/linux/arm/config_components.h  |  4 +-
+ .../ChromeOS/linux/arm/libavcodec/codec_list.c     |  1 +
+ .../ChromeOS/linux/arm/libavcodec/parser_list.c    |  1 +
+ chromium/config/ChromeOS/linux/arm64/config.h      |  6 +--
+ .../ChromeOS/linux/arm64/config_components.h       |  4 +-
+ .../ChromeOS/linux/arm64/libavcodec/codec_list.c   |  1 +
+ .../ChromeOS/linux/arm64/libavcodec/parser_list.c  |  1 +
+ chromium/config/ChromeOS/linux/ia32/config.asm     |  6 +--
+ chromium/config/ChromeOS/linux/ia32/config.h       |  6 +--
+ .../config/ChromeOS/linux/ia32/config_components.h |  4 +-
+ .../ChromeOS/linux/ia32/libavcodec/codec_list.c    |  1 +
+ .../ChromeOS/linux/ia32/libavcodec/parser_list.c   |  1 +
+ chromium/config/ChromeOS/linux/x64/config.asm      |  6 +--
+ chromium/config/ChromeOS/linux/x64/config.h        |  6 +--
+ .../config/ChromeOS/linux/x64/config_components.h  |  4 +-
+ .../ChromeOS/linux/x64/libavcodec/codec_list.c     |  1 +
+ .../ChromeOS/linux/x64/libavcodec/parser_list.c    |  1 +
+ chromium/config/Chromium/android/arm-neon/config.h |  6 +--
+ .../Chromium/android/arm-neon/config_components.h  |  4 +-
+ .../android/arm-neon/libavcodec/codec_list.c       |  1 +
+ .../android/arm-neon/libavcodec/parser_list.c      |  1 +
+ chromium/config/Chromium/android/arm64/config.h    |  6 +--
+ .../Chromium/android/arm64/config_components.h     |  4 +-
+ .../Chromium/android/arm64/libavcodec/codec_list.c |  1 +
+ .../android/arm64/libavcodec/parser_list.c         |  1 +
+ chromium/config/Chromium/android/ia32/config.asm   |  2 +-
+ chromium/config/Chromium/android/ia32/config.h     |  6 +--
+ .../Chromium/android/ia32/config_components.h      |  4 +-
+ .../Chromium/android/ia32/libavcodec/codec_list.c  |  1 +
+ .../Chromium/android/ia32/libavcodec/parser_list.c |  1 +
+ chromium/config/Chromium/android/mips64el/config.h |  8 +--
+ .../android/mips64el/libavcodec/codec_list.c       |  1 +
+ .../android/mips64el/libavcodec/parser_list.c      |  1 +
+ chromium/config/Chromium/android/mipsel/config.h   |  8 +--
+ .../android/mipsel/libavcodec/codec_list.c         |  1 +
+ .../android/mipsel/libavcodec/parser_list.c        |  1 +
+ chromium/config/Chromium/android/x64/config.asm    |  6 +--
+ chromium/config/Chromium/android/x64/config.h      |  6 +--
+ .../Chromium/android/x64/config_components.h       |  4 +-
+ .../Chromium/android/x64/libavcodec/codec_list.c   |  1 +
+ .../Chromium/android/x64/libavcodec/parser_list.c  |  1 +
+ chromium/config/Chromium/linux-noasm/x64/config.h  |  6 +--
+ .../Chromium/linux-noasm/x64/config_components.h   |  4 +-
+ .../linux-noasm/x64/libavcodec/codec_list.c        |  1 +
+ .../linux-noasm/x64/libavcodec/parser_list.c       |  1 +
+ chromium/config/Chromium/linux/arm-neon/config.h   |  6 +--
+ .../Chromium/linux/arm-neon/config_components.h    |  4 +-
+ .../linux/arm-neon/libavcodec/codec_list.c         |  1 +
+ .../linux/arm-neon/libavcodec/parser_list.c        |  1 +
+ chromium/config/Chromium/linux/arm/config.h        |  6 +--
+ .../config/Chromium/linux/arm/config_components.h  |  4 +-
+ .../Chromium/linux/arm/libavcodec/codec_list.c     |  1 +
+ .../Chromium/linux/arm/libavcodec/parser_list.c    |  1 +
+ chromium/config/Chromium/linux/arm64/config.h      |  6 +--
+ .../Chromium/linux/arm64/config_components.h       |  4 +-
+ .../Chromium/linux/arm64/libavcodec/codec_list.c   |  1 +
+ .../Chromium/linux/arm64/libavcodec/parser_list.c  |  1 +
+ chromium/config/Chromium/linux/ia32/config.asm     |  6 +--
+ chromium/config/Chromium/linux/ia32/config.h       |  6 +--
+ .../config/Chromium/linux/ia32/config_components.h |  4 +-
+ .../Chromium/linux/ia32/libavcodec/codec_list.c    |  1 +
+ .../Chromium/linux/ia32/libavcodec/parser_list.c   |  1 +
+ chromium/config/Chromium/linux/x64/config.asm      |  6 +--
+ chromium/config/Chromium/linux/x64/config.h        |  6 +--
+ .../config/Chromium/linux/x64/config_components.h  |  4 +-
+ .../Chromium/linux/x64/libavcodec/codec_list.c     |  1 +
+ .../Chromium/linux/x64/libavcodec/parser_list.c    |  1 +
+ chromium/config/Chromium/mac/arm64/config.h        |  6 +--
+ .../config/Chromium/mac/arm64/config_components.h  |  4 +-
+ .../Chromium/mac/arm64/libavcodec/codec_list.c     |  1 +
+ .../Chromium/mac/arm64/libavcodec/parser_list.c    |  1 +
+ chromium/config/Chromium/mac/x64/config.asm        |  6 +--
+ chromium/config/Chromium/mac/x64/config.h          |  6 +--
+ .../config/Chromium/mac/x64/config_components.h    |  4 +-
+ .../Chromium/mac/x64/libavcodec/codec_list.c       |  1 +
+ .../Chromium/mac/x64/libavcodec/parser_list.c      |  1 +
+ chromium/config/Chromium/win-msvc/ia32/config.asm  |  4 +-
+ chromium/config/Chromium/win-msvc/ia32/config.h    |  8 +--
+ .../Chromium/win-msvc/ia32/libavcodec/codec_list.c |  1 +
+ .../win-msvc/ia32/libavcodec/parser_list.c         |  1 +
+ chromium/config/Chromium/win-msvc/x64/config.asm   |  4 +-
+ chromium/config/Chromium/win-msvc/x64/config.h     |  8 +--
+ .../Chromium/win-msvc/x64/libavcodec/codec_list.c  |  1 +
+ .../Chromium/win-msvc/x64/libavcodec/parser_list.c |  1 +
+ chromium/config/Chromium/win/arm64/config.h        |  6 +--
+ .../config/Chromium/win/arm64/config_components.h  |  4 +-
+ .../Chromium/win/arm64/libavcodec/codec_list.c     |  1 +
+ .../Chromium/win/arm64/libavcodec/parser_list.c    |  1 +
+ chromium/config/Chromium/win/ia32/config.asm       |  6 +--
+ chromium/config/Chromium/win/ia32/config.h         |  6 +--
+ .../config/Chromium/win/ia32/config_components.h   |  4 +-
+ .../Chromium/win/ia32/libavcodec/codec_list.c      |  1 +
+ .../Chromium/win/ia32/libavcodec/parser_list.c     |  1 +
+ chromium/config/Chromium/win/x64/config.asm        |  6 +--
+ chromium/config/Chromium/win/x64/config.h          |  6 +--
+ .../config/Chromium/win/x64/config_components.h    |  4 +-
+ .../Chromium/win/x64/libavcodec/codec_list.c       |  1 +
+ .../Chromium/win/x64/libavcodec/parser_list.c      |  1 +
+ chromium/scripts/build_ffmpeg.py                   |  4 +-
+ ffmpeg_generated.gni                               | 57 ++++++++++++++++++++++
+ ...torename_libavcodec_aarch64_hevcdsp_idct_neon.S |  2 +
+ ...utorename_libavcodec_aarch64_hevcdsp_sao_neon.S |  2 +
+ libavcodec/autorename_libavcodec_bswapdsp.c        |  2 +
+ 193 files changed, 417 insertions(+), 266 deletions(-)
+
+diff --git a/chromium/config/Chrome/android/arm-neon/config.h b/chromium/config/Chrome/android/arm-neon/config.h
+index b27aecf..e2063f0 100644
+--- a/chromium/config/Chrome/android/arm-neon/config.h
++++ b/chromium/config/Chrome/android/arm-neon/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/android/arm-neon/config_components.h b/chromium/config/Chrome/android/arm-neon/config_components.h
+index f714783..ba83c23 100644
+--- a/chromium/config/Chrome/android/arm-neon/config_components.h
++++ b/chromium/config/Chrome/android/arm-neon/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/android/arm-neon/libavcodec/codec_list.c b/chromium/config/Chrome/android/arm-neon/libavcodec/codec_list.c
+index dfe1c0a..8ed1125 100644
+--- a/chromium/config/Chrome/android/arm-neon/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/android/arm-neon/libavcodec/codec_list.c
+@@ -13,4 +13,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/android/arm-neon/libavcodec/parser_list.c b/chromium/config/Chrome/android/arm-neon/libavcodec/parser_list.c
+index b1e4dd0..7cdcadb 100644
+--- a/chromium/config/Chrome/android/arm-neon/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/android/arm-neon/libavcodec/parser_list.c
+@@ -5,4 +5,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/android/arm64/config.h b/chromium/config/Chrome/android/arm64/config.h
+index 7d560a5..489ad34 100644
+--- a/chromium/config/Chrome/android/arm64/config.h
++++ b/chromium/config/Chrome/android/arm64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/android/arm64/config_components.h b/chromium/config/Chrome/android/arm64/config_components.h
+index f714783..ba83c23 100644
+--- a/chromium/config/Chrome/android/arm64/config_components.h
++++ b/chromium/config/Chrome/android/arm64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/android/arm64/libavcodec/codec_list.c b/chromium/config/Chrome/android/arm64/libavcodec/codec_list.c
+index dfe1c0a..8ed1125 100644
+--- a/chromium/config/Chrome/android/arm64/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/android/arm64/libavcodec/codec_list.c
+@@ -13,4 +13,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/android/arm64/libavcodec/parser_list.c b/chromium/config/Chrome/android/arm64/libavcodec/parser_list.c
+index b1e4dd0..7cdcadb 100644
+--- a/chromium/config/Chrome/android/arm64/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/android/arm64/libavcodec/parser_list.c
+@@ -5,4 +5,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/android/ia32/config.asm b/chromium/config/Chrome/android/ia32/config.asm
+index 85346d4..b0a504a 100644
+--- a/chromium/config/Chrome/android/ia32/config.asm
++++ b/chromium/config/Chrome/android/ia32/config.asm
+@@ -532,7 +532,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+diff --git a/chromium/config/Chrome/android/ia32/config.h b/chromium/config/Chrome/android/ia32/config.h
+index 090c706..503383c 100644
+--- a/chromium/config/Chrome/android/ia32/config.h
++++ b/chromium/config/Chrome/android/ia32/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/android/ia32/config_components.h b/chromium/config/Chrome/android/ia32/config_components.h
+index f714783..ba83c23 100644
+--- a/chromium/config/Chrome/android/ia32/config_components.h
++++ b/chromium/config/Chrome/android/ia32/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/android/ia32/libavcodec/codec_list.c b/chromium/config/Chrome/android/ia32/libavcodec/codec_list.c
+index dfe1c0a..8ed1125 100644
+--- a/chromium/config/Chrome/android/ia32/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/android/ia32/libavcodec/codec_list.c
+@@ -13,4 +13,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/android/ia32/libavcodec/parser_list.c b/chromium/config/Chrome/android/ia32/libavcodec/parser_list.c
+index b1e4dd0..7cdcadb 100644
+--- a/chromium/config/Chrome/android/ia32/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/android/ia32/libavcodec/parser_list.c
+@@ -5,4 +5,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/android/mips64el/config.h b/chromium/config/Chrome/android/mips64el/config.h
+index e955d10..6957e79 100644
+--- a/chromium/config/Chrome/android/mips64el/config.h
++++ b/chromium/config/Chrome/android/mips64el/config.h
+@@ -593,7 +593,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -621,7 +621,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+@@ -798,7 +798,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -1518,7 +1518,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_MJPEG_PARSER 0
+ #define CONFIG_MLP_PARSER 0
+ #define CONFIG_MPEG4VIDEO_PARSER 0
+diff --git a/chromium/config/Chrome/android/mips64el/libavcodec/codec_list.c b/chromium/config/Chrome/android/mips64el/libavcodec/codec_list.c
+index 4c1c44c..42948a5 100644
+--- a/chromium/config/Chrome/android/mips64el/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/android/mips64el/libavcodec/codec_list.c
+@@ -13,4 +13,5 @@ static const AVCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/android/mips64el/libavcodec/parser_list.c b/chromium/config/Chrome/android/mips64el/libavcodec/parser_list.c
+index b1e4dd0..7cdcadb 100644
+--- a/chromium/config/Chrome/android/mips64el/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/android/mips64el/libavcodec/parser_list.c
+@@ -5,4 +5,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/android/mipsel/config.h b/chromium/config/Chrome/android/mipsel/config.h
+index be3e0fa..9681659 100644
+--- a/chromium/config/Chrome/android/mipsel/config.h
++++ b/chromium/config/Chrome/android/mipsel/config.h
+@@ -593,7 +593,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -621,7 +621,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+@@ -798,7 +798,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -1518,7 +1518,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_MJPEG_PARSER 0
+ #define CONFIG_MLP_PARSER 0
+ #define CONFIG_MPEG4VIDEO_PARSER 0
+diff --git a/chromium/config/Chrome/android/mipsel/libavcodec/codec_list.c b/chromium/config/Chrome/android/mipsel/libavcodec/codec_list.c
+index 4c1c44c..42948a5 100644
+--- a/chromium/config/Chrome/android/mipsel/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/android/mipsel/libavcodec/codec_list.c
+@@ -13,4 +13,5 @@ static const AVCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/android/mipsel/libavcodec/parser_list.c b/chromium/config/Chrome/android/mipsel/libavcodec/parser_list.c
+index b1e4dd0..7cdcadb 100644
+--- a/chromium/config/Chrome/android/mipsel/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/android/mipsel/libavcodec/parser_list.c
+@@ -5,4 +5,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/android/x64/config.asm b/chromium/config/Chrome/android/x64/config.asm
+index 9be7e5f..c27ac26 100644
+--- a/chromium/config/Chrome/android/x64/config.asm
++++ b/chromium/config/Chrome/android/x64/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 0
+ %define CONFIG_H264PRED 0
+ %define CONFIG_H264QPEL 0
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 0
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/android/x64/config.h b/chromium/config/Chrome/android/x64/config.h
+index 0246737..4369d36 100644
+--- a/chromium/config/Chrome/android/x64/config.h
++++ b/chromium/config/Chrome/android/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/android/x64/config_components.h b/chromium/config/Chrome/android/x64/config_components.h
+index f714783..ba83c23 100644
+--- a/chromium/config/Chrome/android/x64/config_components.h
++++ b/chromium/config/Chrome/android/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/android/x64/libavcodec/codec_list.c b/chromium/config/Chrome/android/x64/libavcodec/codec_list.c
+index dfe1c0a..8ed1125 100644
+--- a/chromium/config/Chrome/android/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/android/x64/libavcodec/codec_list.c
+@@ -13,4 +13,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/android/x64/libavcodec/parser_list.c b/chromium/config/Chrome/android/x64/libavcodec/parser_list.c
+index b1e4dd0..7cdcadb 100644
+--- a/chromium/config/Chrome/android/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/android/x64/libavcodec/parser_list.c
+@@ -5,4 +5,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/linux-noasm/x64/config.h b/chromium/config/Chrome/linux-noasm/x64/config.h
+index 461f96d..25a470b 100644
+--- a/chromium/config/Chrome/linux-noasm/x64/config.h
++++ b/chromium/config/Chrome/linux-noasm/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/linux-noasm/x64/config_components.h b/chromium/config/Chrome/linux-noasm/x64/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/linux-noasm/x64/config_components.h
++++ b/chromium/config/Chrome/linux-noasm/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/linux-noasm/x64/libavcodec/codec_list.c b/chromium/config/Chrome/linux-noasm/x64/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/linux-noasm/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/linux-noasm/x64/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/linux-noasm/x64/libavcodec/parser_list.c b/chromium/config/Chrome/linux-noasm/x64/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/linux-noasm/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/linux-noasm/x64/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/linux/arm-neon/config.h b/chromium/config/Chrome/linux/arm-neon/config.h
+index 31ee73f..431615a 100644
+--- a/chromium/config/Chrome/linux/arm-neon/config.h
++++ b/chromium/config/Chrome/linux/arm-neon/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/linux/arm-neon/config_components.h b/chromium/config/Chrome/linux/arm-neon/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/linux/arm-neon/config_components.h
++++ b/chromium/config/Chrome/linux/arm-neon/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/linux/arm-neon/libavcodec/codec_list.c b/chromium/config/Chrome/linux/arm-neon/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/linux/arm-neon/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/linux/arm-neon/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/linux/arm-neon/libavcodec/parser_list.c b/chromium/config/Chrome/linux/arm-neon/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/linux/arm-neon/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/linux/arm-neon/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/linux/arm/config.h b/chromium/config/Chrome/linux/arm/config.h
+index 4468bbd..cab9eb7 100644
+--- a/chromium/config/Chrome/linux/arm/config.h
++++ b/chromium/config/Chrome/linux/arm/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/linux/arm/config_components.h b/chromium/config/Chrome/linux/arm/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/linux/arm/config_components.h
++++ b/chromium/config/Chrome/linux/arm/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/linux/arm/libavcodec/codec_list.c b/chromium/config/Chrome/linux/arm/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/linux/arm/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/linux/arm/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/linux/arm/libavcodec/parser_list.c b/chromium/config/Chrome/linux/arm/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/linux/arm/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/linux/arm/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/linux/arm64/config.h b/chromium/config/Chrome/linux/arm64/config.h
+index 031fbc3..c6fbaef 100644
+--- a/chromium/config/Chrome/linux/arm64/config.h
++++ b/chromium/config/Chrome/linux/arm64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/linux/arm64/config_components.h b/chromium/config/Chrome/linux/arm64/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/linux/arm64/config_components.h
++++ b/chromium/config/Chrome/linux/arm64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/linux/arm64/libavcodec/codec_list.c b/chromium/config/Chrome/linux/arm64/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/linux/arm64/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/linux/arm64/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/linux/arm64/libavcodec/parser_list.c b/chromium/config/Chrome/linux/arm64/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/linux/arm64/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/linux/arm64/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/linux/ia32/config.asm b/chromium/config/Chrome/linux/ia32/config.asm
+index 9a44bf0..1a6a233 100644
+--- a/chromium/config/Chrome/linux/ia32/config.asm
++++ b/chromium/config/Chrome/linux/ia32/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 1
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 1
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 1
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/linux/ia32/config.h b/chromium/config/Chrome/linux/ia32/config.h
+index b8c36b8..43061f1 100644
+--- a/chromium/config/Chrome/linux/ia32/config.h
++++ b/chromium/config/Chrome/linux/ia32/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/linux/ia32/config_components.h b/chromium/config/Chrome/linux/ia32/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/linux/ia32/config_components.h
++++ b/chromium/config/Chrome/linux/ia32/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/linux/ia32/libavcodec/codec_list.c b/chromium/config/Chrome/linux/ia32/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/linux/ia32/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/linux/ia32/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/linux/ia32/libavcodec/parser_list.c b/chromium/config/Chrome/linux/ia32/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/linux/ia32/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/linux/ia32/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/linux/x64/config.asm b/chromium/config/Chrome/linux/x64/config.asm
+index 6a478f4..a5fffc0 100644
+--- a/chromium/config/Chrome/linux/x64/config.asm
++++ b/chromium/config/Chrome/linux/x64/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 1
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 1
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 1
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/linux/x64/config.h b/chromium/config/Chrome/linux/x64/config.h
+index 86e2085..cbdfd54 100644
+--- a/chromium/config/Chrome/linux/x64/config.h
++++ b/chromium/config/Chrome/linux/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/linux/x64/config_components.h b/chromium/config/Chrome/linux/x64/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/linux/x64/config_components.h
++++ b/chromium/config/Chrome/linux/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/linux/x64/libavcodec/codec_list.c b/chromium/config/Chrome/linux/x64/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/linux/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/linux/x64/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/linux/x64/libavcodec/parser_list.c b/chromium/config/Chrome/linux/x64/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/linux/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/linux/x64/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/mac/arm64/config.h b/chromium/config/Chrome/mac/arm64/config.h
+index 26d1750..89adfcd 100644
+--- a/chromium/config/Chrome/mac/arm64/config.h
++++ b/chromium/config/Chrome/mac/arm64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/mac/arm64/config_components.h b/chromium/config/Chrome/mac/arm64/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/mac/arm64/config_components.h
++++ b/chromium/config/Chrome/mac/arm64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/mac/arm64/libavcodec/codec_list.c b/chromium/config/Chrome/mac/arm64/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/mac/arm64/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/mac/arm64/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/mac/arm64/libavcodec/parser_list.c b/chromium/config/Chrome/mac/arm64/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/mac/arm64/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/mac/arm64/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/mac/x64/config.asm b/chromium/config/Chrome/mac/x64/config.asm
+index ef3d9c4..096e19f 100644
+--- a/chromium/config/Chrome/mac/x64/config.asm
++++ b/chromium/config/Chrome/mac/x64/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 1
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 1
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 1
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/mac/x64/config.h b/chromium/config/Chrome/mac/x64/config.h
+index b057322..50fc8e0 100644
+--- a/chromium/config/Chrome/mac/x64/config.h
++++ b/chromium/config/Chrome/mac/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/mac/x64/config_components.h b/chromium/config/Chrome/mac/x64/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/mac/x64/config_components.h
++++ b/chromium/config/Chrome/mac/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/mac/x64/libavcodec/codec_list.c b/chromium/config/Chrome/mac/x64/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/mac/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/mac/x64/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/mac/x64/libavcodec/parser_list.c b/chromium/config/Chrome/mac/x64/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/mac/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/mac/x64/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/win-msvc/ia32/config.asm b/chromium/config/Chrome/win-msvc/ia32/config.asm
+index ac13dda..d594971 100644
+--- a/chromium/config/Chrome/win-msvc/ia32/config.asm
++++ b/chromium/config/Chrome/win-msvc/ia32/config.asm
+@@ -563,7 +563,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 1
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_H264 0
+@@ -587,7 +587,7 @@
+ %define CONFIG_H264PARSE 1
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 1
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/win-msvc/ia32/config.h b/chromium/config/Chrome/win-msvc/ia32/config.h
+index 90497d0..1859145 100644
+--- a/chromium/config/Chrome/win-msvc/ia32/config.h
++++ b/chromium/config/Chrome/win-msvc/ia32/config.h
+@@ -578,7 +578,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_H264 0
+@@ -602,7 +602,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+@@ -767,7 +767,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -1465,7 +1465,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_MJPEG_PARSER 0
+ #define CONFIG_MLP_PARSER 0
+ #define CONFIG_MPEG4VIDEO_PARSER 0
+diff --git a/chromium/config/Chrome/win-msvc/ia32/libavcodec/codec_list.c b/chromium/config/Chrome/win-msvc/ia32/libavcodec/codec_list.c
+index 49f757b..5ca1e99 100644
+--- a/chromium/config/Chrome/win-msvc/ia32/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/win-msvc/ia32/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const AVCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/win-msvc/ia32/libavcodec/parser_list.c b/chromium/config/Chrome/win-msvc/ia32/libavcodec/parser_list.c
+index 19d670a..f55c2ca 100644
+--- a/chromium/config/Chrome/win-msvc/ia32/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/win-msvc/ia32/libavcodec/parser_list.c
+@@ -7,4 +7,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vorbis_parser,
+     &ff_vp3_parser,
+     &ff_vp8_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/win-msvc/x64/config.asm b/chromium/config/Chrome/win-msvc/x64/config.asm
+index 49d66ac..37d6a68 100644
+--- a/chromium/config/Chrome/win-msvc/x64/config.asm
++++ b/chromium/config/Chrome/win-msvc/x64/config.asm
+@@ -563,7 +563,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 1
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_H264 0
+@@ -587,7 +587,7 @@
+ %define CONFIG_H264PARSE 1
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 1
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/win-msvc/x64/config.h b/chromium/config/Chrome/win-msvc/x64/config.h
+index 3596821..133d55d 100644
+--- a/chromium/config/Chrome/win-msvc/x64/config.h
++++ b/chromium/config/Chrome/win-msvc/x64/config.h
+@@ -578,7 +578,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_H264 0
+@@ -602,7 +602,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+@@ -767,7 +767,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -1465,7 +1465,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_MJPEG_PARSER 0
+ #define CONFIG_MLP_PARSER 0
+ #define CONFIG_MPEG4VIDEO_PARSER 0
+diff --git a/chromium/config/Chrome/win-msvc/x64/libavcodec/codec_list.c b/chromium/config/Chrome/win-msvc/x64/libavcodec/codec_list.c
+index 49f757b..5ca1e99 100644
+--- a/chromium/config/Chrome/win-msvc/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/win-msvc/x64/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const AVCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/win-msvc/x64/libavcodec/parser_list.c b/chromium/config/Chrome/win-msvc/x64/libavcodec/parser_list.c
+index 19d670a..f55c2ca 100644
+--- a/chromium/config/Chrome/win-msvc/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/win-msvc/x64/libavcodec/parser_list.c
+@@ -7,4 +7,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vorbis_parser,
+     &ff_vp3_parser,
+     &ff_vp8_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/win/arm64/config.h b/chromium/config/Chrome/win/arm64/config.h
+index dfa64a9..37a653c 100644
+--- a/chromium/config/Chrome/win/arm64/config.h
++++ b/chromium/config/Chrome/win/arm64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/win/arm64/config_components.h b/chromium/config/Chrome/win/arm64/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/win/arm64/config_components.h
++++ b/chromium/config/Chrome/win/arm64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/win/arm64/libavcodec/codec_list.c b/chromium/config/Chrome/win/arm64/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/win/arm64/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/win/arm64/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/win/arm64/libavcodec/parser_list.c b/chromium/config/Chrome/win/arm64/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/win/arm64/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/win/arm64/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/win/ia32/config.asm b/chromium/config/Chrome/win/ia32/config.asm
+index 161ebc1..6958bc9 100644
+--- a/chromium/config/Chrome/win/ia32/config.asm
++++ b/chromium/config/Chrome/win/ia32/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 1
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 1
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 1
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/win/ia32/config.h b/chromium/config/Chrome/win/ia32/config.h
+index 14de7c5..fb20cac 100644
+--- a/chromium/config/Chrome/win/ia32/config.h
++++ b/chromium/config/Chrome/win/ia32/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/win/ia32/config_components.h b/chromium/config/Chrome/win/ia32/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/win/ia32/config_components.h
++++ b/chromium/config/Chrome/win/ia32/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/win/ia32/libavcodec/codec_list.c b/chromium/config/Chrome/win/ia32/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/win/ia32/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/win/ia32/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/win/ia32/libavcodec/parser_list.c b/chromium/config/Chrome/win/ia32/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/win/ia32/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/win/ia32/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chrome/win/x64/config.asm b/chromium/config/Chrome/win/x64/config.asm
+index 84aa218..80246bc 100644
+--- a/chromium/config/Chrome/win/x64/config.asm
++++ b/chromium/config/Chrome/win/x64/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 1
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 1
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 1
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/win/x64/config.h b/chromium/config/Chrome/win/x64/config.h
+index 5bbef6f..6dc05cd 100644
+--- a/chromium/config/Chrome/win/x64/config.h
++++ b/chromium/config/Chrome/win/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chrome/win/x64/config_components.h b/chromium/config/Chrome/win/x64/config_components.h
+index d10d99c..ddff6e8 100644
+--- a/chromium/config/Chrome/win/x64/config_components.h
++++ b/chromium/config/Chrome/win/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chrome/win/x64/libavcodec/codec_list.c b/chromium/config/Chrome/win/x64/libavcodec/codec_list.c
+index cbd7f39..80d0456 100644
+--- a/chromium/config/Chrome/win/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chrome/win/x64/libavcodec/codec_list.c
+@@ -17,4 +17,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chrome/win/x64/libavcodec/parser_list.c b/chromium/config/Chrome/win/x64/libavcodec/parser_list.c
+index 50acddb..1269282 100644
+--- a/chromium/config/Chrome/win/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chrome/win/x64/libavcodec/parser_list.c
+@@ -8,4 +8,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux-noasm/x64/config.h b/chromium/config/ChromeOS/linux-noasm/x64/config.h
+index 44a148c..a4b4985 100644
+--- a/chromium/config/ChromeOS/linux-noasm/x64/config.h
++++ b/chromium/config/ChromeOS/linux-noasm/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 1
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 1
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/ChromeOS/linux-noasm/x64/config_components.h b/chromium/config/ChromeOS/linux-noasm/x64/config_components.h
+index 492a7fa..3521e58 100644
+--- a/chromium/config/ChromeOS/linux-noasm/x64/config_components.h
++++ b/chromium/config/ChromeOS/linux-noasm/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 1
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/ChromeOS/linux-noasm/x64/libavcodec/codec_list.c b/chromium/config/ChromeOS/linux-noasm/x64/libavcodec/codec_list.c
+index 54175cb..d38580a 100644
+--- a/chromium/config/ChromeOS/linux-noasm/x64/libavcodec/codec_list.c
++++ b/chromium/config/ChromeOS/linux-noasm/x64/libavcodec/codec_list.c
+@@ -22,4 +22,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux-noasm/x64/libavcodec/parser_list.c b/chromium/config/ChromeOS/linux-noasm/x64/libavcodec/parser_list.c
+index 48dcf41..1c76f66 100644
+--- a/chromium/config/ChromeOS/linux-noasm/x64/libavcodec/parser_list.c
++++ b/chromium/config/ChromeOS/linux-noasm/x64/libavcodec/parser_list.c
+@@ -11,4 +11,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux/arm-neon/config.h b/chromium/config/ChromeOS/linux/arm-neon/config.h
+index c6ea9bc..f037789 100644
+--- a/chromium/config/ChromeOS/linux/arm-neon/config.h
++++ b/chromium/config/ChromeOS/linux/arm-neon/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 1
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 1
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/ChromeOS/linux/arm-neon/config_components.h b/chromium/config/ChromeOS/linux/arm-neon/config_components.h
+index 492a7fa..3521e58 100644
+--- a/chromium/config/ChromeOS/linux/arm-neon/config_components.h
++++ b/chromium/config/ChromeOS/linux/arm-neon/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 1
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/ChromeOS/linux/arm-neon/libavcodec/codec_list.c b/chromium/config/ChromeOS/linux/arm-neon/libavcodec/codec_list.c
+index 54175cb..d38580a 100644
+--- a/chromium/config/ChromeOS/linux/arm-neon/libavcodec/codec_list.c
++++ b/chromium/config/ChromeOS/linux/arm-neon/libavcodec/codec_list.c
+@@ -22,4 +22,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux/arm-neon/libavcodec/parser_list.c b/chromium/config/ChromeOS/linux/arm-neon/libavcodec/parser_list.c
+index 48dcf41..1c76f66 100644
+--- a/chromium/config/ChromeOS/linux/arm-neon/libavcodec/parser_list.c
++++ b/chromium/config/ChromeOS/linux/arm-neon/libavcodec/parser_list.c
+@@ -11,4 +11,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux/arm/config.h b/chromium/config/ChromeOS/linux/arm/config.h
+index 6482a14..0e4ee3d 100644
+--- a/chromium/config/ChromeOS/linux/arm/config.h
++++ b/chromium/config/ChromeOS/linux/arm/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 1
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 1
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/ChromeOS/linux/arm/config_components.h b/chromium/config/ChromeOS/linux/arm/config_components.h
+index 492a7fa..3521e58 100644
+--- a/chromium/config/ChromeOS/linux/arm/config_components.h
++++ b/chromium/config/ChromeOS/linux/arm/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 1
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/ChromeOS/linux/arm/libavcodec/codec_list.c b/chromium/config/ChromeOS/linux/arm/libavcodec/codec_list.c
+index 54175cb..d38580a 100644
+--- a/chromium/config/ChromeOS/linux/arm/libavcodec/codec_list.c
++++ b/chromium/config/ChromeOS/linux/arm/libavcodec/codec_list.c
+@@ -22,4 +22,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux/arm/libavcodec/parser_list.c b/chromium/config/ChromeOS/linux/arm/libavcodec/parser_list.c
+index 48dcf41..1c76f66 100644
+--- a/chromium/config/ChromeOS/linux/arm/libavcodec/parser_list.c
++++ b/chromium/config/ChromeOS/linux/arm/libavcodec/parser_list.c
+@@ -11,4 +11,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux/arm64/config.h b/chromium/config/ChromeOS/linux/arm64/config.h
+index 0dc0006..6f1b589 100644
+--- a/chromium/config/ChromeOS/linux/arm64/config.h
++++ b/chromium/config/ChromeOS/linux/arm64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 1
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 1
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/ChromeOS/linux/arm64/config_components.h b/chromium/config/ChromeOS/linux/arm64/config_components.h
+index 492a7fa..3521e58 100644
+--- a/chromium/config/ChromeOS/linux/arm64/config_components.h
++++ b/chromium/config/ChromeOS/linux/arm64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 1
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/ChromeOS/linux/arm64/libavcodec/codec_list.c b/chromium/config/ChromeOS/linux/arm64/libavcodec/codec_list.c
+index 54175cb..d38580a 100644
+--- a/chromium/config/ChromeOS/linux/arm64/libavcodec/codec_list.c
++++ b/chromium/config/ChromeOS/linux/arm64/libavcodec/codec_list.c
+@@ -22,4 +22,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux/arm64/libavcodec/parser_list.c b/chromium/config/ChromeOS/linux/arm64/libavcodec/parser_list.c
+index 48dcf41..1c76f66 100644
+--- a/chromium/config/ChromeOS/linux/arm64/libavcodec/parser_list.c
++++ b/chromium/config/ChromeOS/linux/arm64/libavcodec/parser_list.c
+@@ -11,4 +11,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux/ia32/config.asm b/chromium/config/ChromeOS/linux/ia32/config.asm
+index d10754f..828436a 100644
+--- a/chromium/config/ChromeOS/linux/ia32/config.asm
++++ b/chromium/config/ChromeOS/linux/ia32/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 1
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 1
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 1
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 1
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 1
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/ChromeOS/linux/ia32/config.h b/chromium/config/ChromeOS/linux/ia32/config.h
+index 0d59a81..64e581e 100644
+--- a/chromium/config/ChromeOS/linux/ia32/config.h
++++ b/chromium/config/ChromeOS/linux/ia32/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 1
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 1
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/ChromeOS/linux/ia32/config_components.h b/chromium/config/ChromeOS/linux/ia32/config_components.h
+index 492a7fa..3521e58 100644
+--- a/chromium/config/ChromeOS/linux/ia32/config_components.h
++++ b/chromium/config/ChromeOS/linux/ia32/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 1
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/ChromeOS/linux/ia32/libavcodec/codec_list.c b/chromium/config/ChromeOS/linux/ia32/libavcodec/codec_list.c
+index 54175cb..d38580a 100644
+--- a/chromium/config/ChromeOS/linux/ia32/libavcodec/codec_list.c
++++ b/chromium/config/ChromeOS/linux/ia32/libavcodec/codec_list.c
+@@ -22,4 +22,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux/ia32/libavcodec/parser_list.c b/chromium/config/ChromeOS/linux/ia32/libavcodec/parser_list.c
+index 48dcf41..1c76f66 100644
+--- a/chromium/config/ChromeOS/linux/ia32/libavcodec/parser_list.c
++++ b/chromium/config/ChromeOS/linux/ia32/libavcodec/parser_list.c
+@@ -11,4 +11,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux/x64/config.asm b/chromium/config/ChromeOS/linux/x64/config.asm
+index 1c7f355..1ea37fe 100644
+--- a/chromium/config/ChromeOS/linux/x64/config.asm
++++ b/chromium/config/ChromeOS/linux/x64/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 1
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 1
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 1
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 1
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 1
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/ChromeOS/linux/x64/config.h b/chromium/config/ChromeOS/linux/x64/config.h
+index 7361db8..9dad4d7 100644
+--- a/chromium/config/ChromeOS/linux/x64/config.h
++++ b/chromium/config/ChromeOS/linux/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 1
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 1
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 1
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 1
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 1
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/ChromeOS/linux/x64/config_components.h b/chromium/config/ChromeOS/linux/x64/config_components.h
+index 492a7fa..3521e58 100644
+--- a/chromium/config/ChromeOS/linux/x64/config_components.h
++++ b/chromium/config/ChromeOS/linux/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 1
+ #define CONFIG_H264_PARSER 1
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/ChromeOS/linux/x64/libavcodec/codec_list.c b/chromium/config/ChromeOS/linux/x64/libavcodec/codec_list.c
+index 54175cb..d38580a 100644
+--- a/chromium/config/ChromeOS/linux/x64/libavcodec/codec_list.c
++++ b/chromium/config/ChromeOS/linux/x64/libavcodec/codec_list.c
+@@ -22,4 +22,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/ChromeOS/linux/x64/libavcodec/parser_list.c b/chromium/config/ChromeOS/linux/x64/libavcodec/parser_list.c
+index 48dcf41..1c76f66 100644
+--- a/chromium/config/ChromeOS/linux/x64/libavcodec/parser_list.c
++++ b/chromium/config/ChromeOS/linux/x64/libavcodec/parser_list.c
+@@ -11,4 +11,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/android/arm-neon/config.h b/chromium/config/Chromium/android/arm-neon/config.h
+index 7c43357..e5e3dc8 100644
+--- a/chromium/config/Chromium/android/arm-neon/config.h
++++ b/chromium/config/Chromium/android/arm-neon/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/android/arm-neon/config_components.h b/chromium/config/Chromium/android/arm-neon/config_components.h
+index 4989abf..e44ed43 100644
+--- a/chromium/config/Chromium/android/arm-neon/config_components.h
++++ b/chromium/config/Chromium/android/arm-neon/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/android/arm-neon/libavcodec/codec_list.c b/chromium/config/Chromium/android/arm-neon/libavcodec/codec_list.c
+index 7d9debf..f9faf1d 100644
+--- a/chromium/config/Chromium/android/arm-neon/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/android/arm-neon/libavcodec/codec_list.c
+@@ -12,4 +12,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/android/arm-neon/libavcodec/parser_list.c b/chromium/config/Chromium/android/arm-neon/libavcodec/parser_list.c
+index fdc533b..520472e 100644
+--- a/chromium/config/Chromium/android/arm-neon/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/android/arm-neon/libavcodec/parser_list.c
+@@ -4,4 +4,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/android/arm64/config.h b/chromium/config/Chromium/android/arm64/config.h
+index 72b1dd6..912e583 100644
+--- a/chromium/config/Chromium/android/arm64/config.h
++++ b/chromium/config/Chromium/android/arm64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/android/arm64/config_components.h b/chromium/config/Chromium/android/arm64/config_components.h
+index 4989abf..e44ed43 100644
+--- a/chromium/config/Chromium/android/arm64/config_components.h
++++ b/chromium/config/Chromium/android/arm64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/android/arm64/libavcodec/codec_list.c b/chromium/config/Chromium/android/arm64/libavcodec/codec_list.c
+index 7d9debf..f9faf1d 100644
+--- a/chromium/config/Chromium/android/arm64/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/android/arm64/libavcodec/codec_list.c
+@@ -12,4 +12,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/android/arm64/libavcodec/parser_list.c b/chromium/config/Chromium/android/arm64/libavcodec/parser_list.c
+index fdc533b..520472e 100644
+--- a/chromium/config/Chromium/android/arm64/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/android/arm64/libavcodec/parser_list.c
+@@ -4,4 +4,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/android/ia32/config.asm b/chromium/config/Chromium/android/ia32/config.asm
+index d470666..bea65b9 100644
+--- a/chromium/config/Chromium/android/ia32/config.asm
++++ b/chromium/config/Chromium/android/ia32/config.asm
+@@ -532,7 +532,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+diff --git a/chromium/config/Chromium/android/ia32/config.h b/chromium/config/Chromium/android/ia32/config.h
+index ae789ab..85a5ae3 100644
+--- a/chromium/config/Chromium/android/ia32/config.h
++++ b/chromium/config/Chromium/android/ia32/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/android/ia32/config_components.h b/chromium/config/Chromium/android/ia32/config_components.h
+index 4989abf..e44ed43 100644
+--- a/chromium/config/Chromium/android/ia32/config_components.h
++++ b/chromium/config/Chromium/android/ia32/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/android/ia32/libavcodec/codec_list.c b/chromium/config/Chromium/android/ia32/libavcodec/codec_list.c
+index 7d9debf..f9faf1d 100644
+--- a/chromium/config/Chromium/android/ia32/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/android/ia32/libavcodec/codec_list.c
+@@ -12,4 +12,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/android/ia32/libavcodec/parser_list.c b/chromium/config/Chromium/android/ia32/libavcodec/parser_list.c
+index fdc533b..520472e 100644
+--- a/chromium/config/Chromium/android/ia32/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/android/ia32/libavcodec/parser_list.c
+@@ -4,4 +4,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/android/mips64el/config.h b/chromium/config/Chromium/android/mips64el/config.h
+index 1758be3..4c17c66 100644
+--- a/chromium/config/Chromium/android/mips64el/config.h
++++ b/chromium/config/Chromium/android/mips64el/config.h
+@@ -593,7 +593,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -621,7 +621,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+@@ -798,7 +798,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -1518,7 +1518,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_MJPEG_PARSER 0
+ #define CONFIG_MLP_PARSER 0
+ #define CONFIG_MPEG4VIDEO_PARSER 0
+diff --git a/chromium/config/Chromium/android/mips64el/libavcodec/codec_list.c b/chromium/config/Chromium/android/mips64el/libavcodec/codec_list.c
+index 894ef57..1cb442b 100644
+--- a/chromium/config/Chromium/android/mips64el/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/android/mips64el/libavcodec/codec_list.c
+@@ -12,4 +12,5 @@ static const AVCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/android/mips64el/libavcodec/parser_list.c b/chromium/config/Chromium/android/mips64el/libavcodec/parser_list.c
+index fdc533b..520472e 100644
+--- a/chromium/config/Chromium/android/mips64el/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/android/mips64el/libavcodec/parser_list.c
+@@ -4,4 +4,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/android/mipsel/config.h b/chromium/config/Chromium/android/mipsel/config.h
+index 89dabdf..7cbb512 100644
+--- a/chromium/config/Chromium/android/mipsel/config.h
++++ b/chromium/config/Chromium/android/mipsel/config.h
+@@ -593,7 +593,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -621,7 +621,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+@@ -798,7 +798,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -1518,7 +1518,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_MJPEG_PARSER 0
+ #define CONFIG_MLP_PARSER 0
+ #define CONFIG_MPEG4VIDEO_PARSER 0
+diff --git a/chromium/config/Chromium/android/mipsel/libavcodec/codec_list.c b/chromium/config/Chromium/android/mipsel/libavcodec/codec_list.c
+index 894ef57..1cb442b 100644
+--- a/chromium/config/Chromium/android/mipsel/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/android/mipsel/libavcodec/codec_list.c
+@@ -12,4 +12,5 @@ static const AVCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/android/mipsel/libavcodec/parser_list.c b/chromium/config/Chromium/android/mipsel/libavcodec/parser_list.c
+index fdc533b..520472e 100644
+--- a/chromium/config/Chromium/android/mipsel/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/android/mipsel/libavcodec/parser_list.c
+@@ -4,4 +4,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/android/x64/config.asm b/chromium/config/Chromium/android/x64/config.asm
+index e777f0c..218c085 100644
+--- a/chromium/config/Chromium/android/x64/config.asm
++++ b/chromium/config/Chromium/android/x64/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 0
+ %define CONFIG_H264PRED 0
+ %define CONFIG_H264QPEL 0
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 0
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/android/x64/config.h b/chromium/config/Chromium/android/x64/config.h
+index cadbbc1..31710c3 100644
+--- a/chromium/config/Chromium/android/x64/config.h
++++ b/chromium/config/Chromium/android/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 0
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 0
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/android/x64/config_components.h b/chromium/config/Chromium/android/x64/config_components.h
+index 4989abf..e44ed43 100644
+--- a/chromium/config/Chromium/android/x64/config_components.h
++++ b/chromium/config/Chromium/android/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/android/x64/libavcodec/codec_list.c b/chromium/config/Chromium/android/x64/libavcodec/codec_list.c
+index 7d9debf..f9faf1d 100644
+--- a/chromium/config/Chromium/android/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/android/x64/libavcodec/codec_list.c
+@@ -12,4 +12,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/android/x64/libavcodec/parser_list.c b/chromium/config/Chromium/android/x64/libavcodec/parser_list.c
+index fdc533b..520472e 100644
+--- a/chromium/config/Chromium/android/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/android/x64/libavcodec/parser_list.c
+@@ -4,4 +4,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_opus_parser,
+     &ff_vorbis_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/linux-noasm/x64/config.h b/chromium/config/Chromium/linux-noasm/x64/config.h
+index 6aeb1e6..45132ca 100644
+--- a/chromium/config/Chromium/linux-noasm/x64/config.h
++++ b/chromium/config/Chromium/linux-noasm/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/linux-noasm/x64/config_components.h b/chromium/config/Chromium/linux-noasm/x64/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/linux-noasm/x64/config_components.h
++++ b/chromium/config/Chromium/linux-noasm/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/linux-noasm/x64/libavcodec/codec_list.c b/chromium/config/Chromium/linux-noasm/x64/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/linux-noasm/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/linux-noasm/x64/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/linux-noasm/x64/libavcodec/parser_list.c b/chromium/config/Chromium/linux-noasm/x64/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/linux-noasm/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/linux-noasm/x64/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/linux/arm-neon/config.h b/chromium/config/Chromium/linux/arm-neon/config.h
+index 6c07445..9926261 100644
+--- a/chromium/config/Chromium/linux/arm-neon/config.h
++++ b/chromium/config/Chromium/linux/arm-neon/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/linux/arm-neon/config_components.h b/chromium/config/Chromium/linux/arm-neon/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/linux/arm-neon/config_components.h
++++ b/chromium/config/Chromium/linux/arm-neon/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/linux/arm-neon/libavcodec/codec_list.c b/chromium/config/Chromium/linux/arm-neon/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/linux/arm-neon/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/linux/arm-neon/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/linux/arm-neon/libavcodec/parser_list.c b/chromium/config/Chromium/linux/arm-neon/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/linux/arm-neon/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/linux/arm-neon/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/linux/arm/config.h b/chromium/config/Chromium/linux/arm/config.h
+index 8c936c6..2b837be 100644
+--- a/chromium/config/Chromium/linux/arm/config.h
++++ b/chromium/config/Chromium/linux/arm/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/linux/arm/config_components.h b/chromium/config/Chromium/linux/arm/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/linux/arm/config_components.h
++++ b/chromium/config/Chromium/linux/arm/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/linux/arm/libavcodec/codec_list.c b/chromium/config/Chromium/linux/arm/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/linux/arm/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/linux/arm/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/linux/arm/libavcodec/parser_list.c b/chromium/config/Chromium/linux/arm/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/linux/arm/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/linux/arm/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/linux/arm64/config.h b/chromium/config/Chromium/linux/arm64/config.h
+index 50907d8..66b0478 100644
+--- a/chromium/config/Chromium/linux/arm64/config.h
++++ b/chromium/config/Chromium/linux/arm64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/linux/arm64/config_components.h b/chromium/config/Chromium/linux/arm64/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/linux/arm64/config_components.h
++++ b/chromium/config/Chromium/linux/arm64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/linux/arm64/libavcodec/codec_list.c b/chromium/config/Chromium/linux/arm64/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/linux/arm64/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/linux/arm64/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/linux/arm64/libavcodec/parser_list.c b/chromium/config/Chromium/linux/arm64/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/linux/arm64/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/linux/arm64/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/linux/ia32/config.asm b/chromium/config/Chromium/linux/ia32/config.asm
+index 6005855..e96b85f 100644
+--- a/chromium/config/Chromium/linux/ia32/config.asm
++++ b/chromium/config/Chromium/linux/ia32/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 0
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 0
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/linux/ia32/config.h b/chromium/config/Chromium/linux/ia32/config.h
+index c5d562f..3597870 100644
+--- a/chromium/config/Chromium/linux/ia32/config.h
++++ b/chromium/config/Chromium/linux/ia32/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/linux/ia32/config_components.h b/chromium/config/Chromium/linux/ia32/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/linux/ia32/config_components.h
++++ b/chromium/config/Chromium/linux/ia32/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/linux/ia32/libavcodec/codec_list.c b/chromium/config/Chromium/linux/ia32/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/linux/ia32/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/linux/ia32/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/linux/ia32/libavcodec/parser_list.c b/chromium/config/Chromium/linux/ia32/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/linux/ia32/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/linux/ia32/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/linux/x64/config.asm b/chromium/config/Chromium/linux/x64/config.asm
+index 21e789e..7d35be4 100644
+--- a/chromium/config/Chromium/linux/x64/config.asm
++++ b/chromium/config/Chromium/linux/x64/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 0
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 0
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/linux/x64/config.h b/chromium/config/Chromium/linux/x64/config.h
+index 89e606d..aef6b87 100644
+--- a/chromium/config/Chromium/linux/x64/config.h
++++ b/chromium/config/Chromium/linux/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/linux/x64/config_components.h b/chromium/config/Chromium/linux/x64/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/linux/x64/config_components.h
++++ b/chromium/config/Chromium/linux/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/linux/x64/libavcodec/codec_list.c b/chromium/config/Chromium/linux/x64/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/linux/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/linux/x64/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/linux/x64/libavcodec/parser_list.c b/chromium/config/Chromium/linux/x64/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/linux/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/linux/x64/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/mac/arm64/config.h b/chromium/config/Chromium/mac/arm64/config.h
+index 563b5f0..7f18c2b 100644
+--- a/chromium/config/Chromium/mac/arm64/config.h
++++ b/chromium/config/Chromium/mac/arm64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/mac/arm64/config_components.h b/chromium/config/Chromium/mac/arm64/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/mac/arm64/config_components.h
++++ b/chromium/config/Chromium/mac/arm64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/mac/arm64/libavcodec/codec_list.c b/chromium/config/Chromium/mac/arm64/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/mac/arm64/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/mac/arm64/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/mac/arm64/libavcodec/parser_list.c b/chromium/config/Chromium/mac/arm64/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/mac/arm64/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/mac/arm64/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/mac/x64/config.asm b/chromium/config/Chromium/mac/x64/config.asm
+index d8dc0f8..267cee5 100644
+--- a/chromium/config/Chromium/mac/x64/config.asm
++++ b/chromium/config/Chromium/mac/x64/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 0
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 0
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/mac/x64/config.h b/chromium/config/Chromium/mac/x64/config.h
+index 1d0a81a..28c2810 100644
+--- a/chromium/config/Chromium/mac/x64/config.h
++++ b/chromium/config/Chromium/mac/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/mac/x64/config_components.h b/chromium/config/Chromium/mac/x64/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/mac/x64/config_components.h
++++ b/chromium/config/Chromium/mac/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/mac/x64/libavcodec/codec_list.c b/chromium/config/Chromium/mac/x64/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/mac/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/mac/x64/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/mac/x64/libavcodec/parser_list.c b/chromium/config/Chromium/mac/x64/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/mac/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/mac/x64/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/win-msvc/ia32/config.asm b/chromium/config/Chromium/win-msvc/ia32/config.asm
+index e425512..11daab8 100644
+--- a/chromium/config/Chromium/win-msvc/ia32/config.asm
++++ b/chromium/config/Chromium/win-msvc/ia32/config.asm
+@@ -563,7 +563,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_H264 0
+@@ -587,7 +587,7 @@
+ %define CONFIG_H264PARSE 0
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 0
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/win-msvc/ia32/config.h b/chromium/config/Chromium/win-msvc/ia32/config.h
+index a23d3a6..b1fb82a 100644
+--- a/chromium/config/Chromium/win-msvc/ia32/config.h
++++ b/chromium/config/Chromium/win-msvc/ia32/config.h
+@@ -578,7 +578,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_H264 0
+@@ -602,7 +602,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+@@ -767,7 +767,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -1465,7 +1465,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_MJPEG_PARSER 0
+ #define CONFIG_MLP_PARSER 0
+ #define CONFIG_MPEG4VIDEO_PARSER 0
+diff --git a/chromium/config/Chromium/win-msvc/ia32/libavcodec/codec_list.c b/chromium/config/Chromium/win-msvc/ia32/libavcodec/codec_list.c
+index 9407bd2..069f0f6 100644
+--- a/chromium/config/Chromium/win-msvc/ia32/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/win-msvc/ia32/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const AVCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/win-msvc/ia32/libavcodec/parser_list.c b/chromium/config/Chromium/win-msvc/ia32/libavcodec/parser_list.c
+index 4c59b89..8629776 100644
+--- a/chromium/config/Chromium/win-msvc/ia32/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/win-msvc/ia32/libavcodec/parser_list.c
+@@ -5,4 +5,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vorbis_parser,
+     &ff_vp3_parser,
+     &ff_vp8_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/win-msvc/x64/config.asm b/chromium/config/Chromium/win-msvc/x64/config.asm
+index 3c9bd63..31fe3b0 100644
+--- a/chromium/config/Chromium/win-msvc/x64/config.asm
++++ b/chromium/config/Chromium/win-msvc/x64/config.asm
+@@ -563,7 +563,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_H264 0
+@@ -587,7 +587,7 @@
+ %define CONFIG_H264PARSE 0
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 0
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/win-msvc/x64/config.h b/chromium/config/Chromium/win-msvc/x64/config.h
+index 89d69e4..81ff36d 100644
+--- a/chromium/config/Chromium/win-msvc/x64/config.h
++++ b/chromium/config/Chromium/win-msvc/x64/config.h
+@@ -578,7 +578,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_H264 0
+@@ -602,7 +602,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+@@ -767,7 +767,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -1465,7 +1465,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_MJPEG_PARSER 0
+ #define CONFIG_MLP_PARSER 0
+ #define CONFIG_MPEG4VIDEO_PARSER 0
+diff --git a/chromium/config/Chromium/win-msvc/x64/libavcodec/codec_list.c b/chromium/config/Chromium/win-msvc/x64/libavcodec/codec_list.c
+index 9407bd2..069f0f6 100644
+--- a/chromium/config/Chromium/win-msvc/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/win-msvc/x64/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const AVCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/win-msvc/x64/libavcodec/parser_list.c b/chromium/config/Chromium/win-msvc/x64/libavcodec/parser_list.c
+index 4c59b89..8629776 100644
+--- a/chromium/config/Chromium/win-msvc/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/win-msvc/x64/libavcodec/parser_list.c
+@@ -5,4 +5,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vorbis_parser,
+     &ff_vp3_parser,
+     &ff_vp8_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/win/arm64/config.h b/chromium/config/Chromium/win/arm64/config.h
+index 9a3cdf1..9b4cd03 100644
+--- a/chromium/config/Chromium/win/arm64/config.h
++++ b/chromium/config/Chromium/win/arm64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/win/arm64/config_components.h b/chromium/config/Chromium/win/arm64/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/win/arm64/config_components.h
++++ b/chromium/config/Chromium/win/arm64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/win/arm64/libavcodec/codec_list.c b/chromium/config/Chromium/win/arm64/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/win/arm64/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/win/arm64/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/win/arm64/libavcodec/parser_list.c b/chromium/config/Chromium/win/arm64/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/win/arm64/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/win/arm64/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/win/ia32/config.asm b/chromium/config/Chromium/win/ia32/config.asm
+index 66e856b..e58e3fc 100644
+--- a/chromium/config/Chromium/win/ia32/config.asm
++++ b/chromium/config/Chromium/win/ia32/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 0
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 0
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/win/ia32/config.h b/chromium/config/Chromium/win/ia32/config.h
+index 01a7d25..a4e12f8 100644
+--- a/chromium/config/Chromium/win/ia32/config.h
++++ b/chromium/config/Chromium/win/ia32/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/win/ia32/config_components.h b/chromium/config/Chromium/win/ia32/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/win/ia32/config_components.h
++++ b/chromium/config/Chromium/win/ia32/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/win/ia32/libavcodec/codec_list.c b/chromium/config/Chromium/win/ia32/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/win/ia32/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/win/ia32/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/win/ia32/libavcodec/parser_list.c b/chromium/config/Chromium/win/ia32/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/win/ia32/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/win/ia32/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/config/Chromium/win/x64/config.asm b/chromium/config/Chromium/win/x64/config.asm
+index 4a5e1e1..29e1775 100644
+--- a/chromium/config/Chromium/win/x64/config.asm
++++ b/chromium/config/Chromium/win/x64/config.asm
+@@ -640,7 +640,7 @@
+ %define CONFIG_AUDIO_FRAME_QUEUE 0
+ %define CONFIG_AUDIODSP 0
+ %define CONFIG_BLOCKDSP 0
+-%define CONFIG_BSWAPDSP 0
++%define CONFIG_BSWAPDSP 1
+ %define CONFIG_CABAC 0
+ %define CONFIG_CBS 0
+ %define CONFIG_CBS_AV1 0
+@@ -652,7 +652,7 @@
+ %define CONFIG_DEFLATE_WRAPPER 0
+ %define CONFIG_DIRAC_PARSE 1
+ %define CONFIG_DNN 0
+-%define CONFIG_DOVI_RPU 0
++%define CONFIG_DOVI_RPU 1
+ %define CONFIG_DVPROFILE 0
+ %define CONFIG_EXIF 0
+ %define CONFIG_FAANDCT 0
+@@ -669,7 +669,7 @@
+ %define CONFIG_H264PARSE 0
+ %define CONFIG_H264PRED 1
+ %define CONFIG_H264QPEL 0
+-%define CONFIG_HEVCPARSE 0
++%define CONFIG_HEVCPARSE 1
+ %define CONFIG_HPELDSP 1
+ %define CONFIG_HUFFMAN 0
+ %define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/win/x64/config.h b/chromium/config/Chromium/win/x64/config.h
+index a38c0ab..c8090b1 100644
+--- a/chromium/config/Chromium/win/x64/config.h
++++ b/chromium/config/Chromium/win/x64/config.h
+@@ -656,7 +656,7 @@
+ #define CONFIG_AUDIO_FRAME_QUEUE 0
+ #define CONFIG_AUDIODSP 0
+ #define CONFIG_BLOCKDSP 0
+-#define CONFIG_BSWAPDSP 0
++#define CONFIG_BSWAPDSP 1
+ #define CONFIG_CABAC 0
+ #define CONFIG_CBS 0
+ #define CONFIG_CBS_AV1 0
+@@ -668,7 +668,7 @@
+ #define CONFIG_DEFLATE_WRAPPER 0
+ #define CONFIG_DIRAC_PARSE 1
+ #define CONFIG_DNN 0
+-#define CONFIG_DOVI_RPU 0
++#define CONFIG_DOVI_RPU 1
+ #define CONFIG_DVPROFILE 0
+ #define CONFIG_EXIF 0
+ #define CONFIG_FAANDCT 0
+@@ -685,7 +685,7 @@
+ #define CONFIG_H264PARSE 0
+ #define CONFIG_H264PRED 1
+ #define CONFIG_H264QPEL 0
+-#define CONFIG_HEVCPARSE 0
++#define CONFIG_HEVCPARSE 1
+ #define CONFIG_HPELDSP 1
+ #define CONFIG_HUFFMAN 0
+ #define CONFIG_HUFFYUVDSP 0
+diff --git a/chromium/config/Chromium/win/x64/config_components.h b/chromium/config/Chromium/win/x64/config_components.h
+index 2ff96de..9ced32f 100644
+--- a/chromium/config/Chromium/win/x64/config_components.h
++++ b/chromium/config/Chromium/win/x64/config_components.h
+@@ -133,7 +133,7 @@
+ #define CONFIG_H264_QSV_DECODER 0
+ #define CONFIG_H264_RKMPP_DECODER 0
+ #define CONFIG_HAP_DECODER 0
+-#define CONFIG_HEVC_DECODER 0
++#define CONFIG_HEVC_DECODER 1
+ #define CONFIG_HEVC_QSV_DECODER 0
+ #define CONFIG_HEVC_RKMPP_DECODER 0
+ #define CONFIG_HEVC_V4L2M2M_DECODER 0
+@@ -943,7 +943,7 @@
+ #define CONFIG_H261_PARSER 0
+ #define CONFIG_H263_PARSER 0
+ #define CONFIG_H264_PARSER 0
+-#define CONFIG_HEVC_PARSER 0
++#define CONFIG_HEVC_PARSER 1
+ #define CONFIG_HDR_PARSER 0
+ #define CONFIG_IPU_PARSER 0
+ #define CONFIG_JPEG2000_PARSER 0
+diff --git a/chromium/config/Chromium/win/x64/libavcodec/codec_list.c b/chromium/config/Chromium/win/x64/libavcodec/codec_list.c
+index 653357d..9181e1c 100644
+--- a/chromium/config/Chromium/win/x64/libavcodec/codec_list.c
++++ b/chromium/config/Chromium/win/x64/libavcodec/codec_list.c
+@@ -15,4 +15,5 @@ static const FFCodec * const codec_list[] = {
+     &ff_pcm_s32le_decoder,
+     &ff_pcm_u8_decoder,
+     &ff_libopus_decoder,
++    &ff_hevc_decoder,
+     NULL };
+diff --git a/chromium/config/Chromium/win/x64/libavcodec/parser_list.c b/chromium/config/Chromium/win/x64/libavcodec/parser_list.c
+index f81fbe8..2d65b7d 100644
+--- a/chromium/config/Chromium/win/x64/libavcodec/parser_list.c
++++ b/chromium/config/Chromium/win/x64/libavcodec/parser_list.c
+@@ -6,4 +6,5 @@ static const AVCodecParser * const parser_list[] = {
+     &ff_vp3_parser,
+     &ff_vp8_parser,
+     &ff_vp9_parser,
++    &ff_hevc_parser,
+     NULL };
+diff --git a/chromium/scripts/build_ffmpeg.py b/chromium/scripts/build_ffmpeg.py
+index 638964e..9f6cf92 100755
+--- a/chromium/scripts/build_ffmpeg.py
++++ b/chromium/scripts/build_ffmpeg.py
+@@ -1003,9 +1003,9 @@ def ConfigureAndBuild(target_arch, target_os, host_os, host_arch, parallel_jobs,
+ 
+   # Google Chrome & ChromeOS specific configuration.
+   configure_flags['Chrome'].extend([
+-      '--enable-decoder=aac,h264',
++      '--enable-decoder=aac,h264,hevc',
+       '--enable-demuxer=aac',
+-      '--enable-parser=aac,h264',
++      '--enable-parser=aac,h264,hevc',
+   ])
+ 
+   # Google ChromeOS specific configuration.
+diff --git a/ffmpeg_generated.gni b/ffmpeg_generated.gni
+index 7ebd601..104faca 100644
+--- a/ffmpeg_generated.gni
++++ b/ffmpeg_generated.gni
+@@ -259,6 +259,24 @@ if (use_linux_config && ffmpeg_branding == "ChromeOS") {
+ }
+ 
+ if ((is_mac && ffmpeg_branding == "Chrome") || (is_win && ffmpeg_branding == "Chrome") || (use_linux_config && ffmpeg_branding == "Chrome") || (use_linux_config && ffmpeg_branding == "ChromeOS")) {
++  ffmpeg_c_sources += [
++    "libavcodec/autorename_libavcodec_bswapdsp.c",
++    "libavcodec/dovi_rpu.c",
++    "libavcodec/dynamic_hdr10_plus.c",
++    "libavcodec/dynamic_hdr_vivid.c",
++    "libavcodec/hevc_cabac.c",
++    "libavcodec/hevc_data.c",
++    "libavcodec/hevc_filter.c",
++    "libavcodec/hevc_mvs.c",
++    "libavcodec/hevc_parse.c",
++    "libavcodec/hevc_parser.c",
++    "libavcodec/hevc_ps.c",
++    "libavcodec/hevc_refs.c",
++    "libavcodec/hevc_sei.c",
++    "libavcodec/hevcdec.c",
++    "libavcodec/hevcdsp.c",
++    "libavcodec/hevcpred.c"
++  ]
+   ffmpeg_c_sources += [
+     "libavcodec/atsc_a53.c",
+     "libavcodec/cabac.c",
+@@ -376,6 +394,21 @@ if ((use_linux_config && current_cpu == "arm" && arm_use_neon && ffmpeg_branding
+ }
+ 
+ if ((is_mac && current_cpu == "x64" && ffmpeg_branding == "Chrome") || (is_win && current_cpu == "x64" && ffmpeg_branding == "Chrome") || (is_win && current_cpu == "x86" && ffmpeg_branding == "Chrome") || (use_linux_config && current_cpu == "x64" && ffmpeg_branding == "Chrome") || (use_linux_config && current_cpu == "x64" && ffmpeg_branding == "ChromeOS") || (use_linux_config && current_cpu == "x86" && ffmpeg_branding == "Chrome") || (use_linux_config && current_cpu == "x86" && ffmpeg_branding == "ChromeOS")) {
++  ffmpeg_c_sources += [
++    "libavcodec/x86/bswapdsp_init.c",
++    "libavcodec/x86/hevcdsp_init.c"
++  ]
++
++  ffmpeg_asm_sources += [
++    "libavcodec/x86/bswapdsp.asm",
++    "libavcodec/x86/hevc_add_res.asm",
++    "libavcodec/x86/hevc_deblock.asm",
++    "libavcodec/x86/hevc_idct.asm",
++    "libavcodec/x86/hevc_mc.asm",
++    "libavcodec/x86/hevc_sao.asm",
++    "libavcodec/x86/hevc_sao_10bit.asm"
++  ]
++
+   ffmpeg_c_sources += [
+     "libavcodec/x86/h264_qpel.c",
+     "libavcodec/x86/h264chroma_init.c",
+@@ -522,6 +555,15 @@ if ((is_mac && current_cpu == "arm64") || (is_win && current_cpu == "arm64") ||
+ }
+ 
+ if ((is_mac && current_cpu == "arm64" && ffmpeg_branding == "Chrome") || (is_win && current_cpu == "arm64" && ffmpeg_branding == "Chrome") || (use_linux_config && current_cpu == "arm64" && ffmpeg_branding == "Chrome") || (use_linux_config && current_cpu == "arm64" && ffmpeg_branding == "ChromeOS")) {
++  ffmpeg_c_sources += [
++    "libavcodec/aarch64/hevcdsp_init_aarch64.c"
++  ]
++
++  ffmpeg_gas_sources += [
++    "libavcodec/aarch64/autorename_libavcodec_aarch64_hevcdsp_idct_neon.S",
++    "libavcodec/aarch64/autorename_libavcodec_aarch64_hevcdsp_sao_neon.S"
++  ]
++
+   ffmpeg_c_sources += [
+     "libavcodec/aarch64/h264chroma_init_aarch64.c",
+     "libavcodec/aarch64/h264dsp_init_aarch64.c",
+@@ -587,6 +629,10 @@ if (use_linux_config && current_cpu == "arm64" && ffmpeg_branding == "ChromeOS")
+ }
+ 
+ if ((use_linux_config && current_cpu == "arm" && arm_use_neon && ffmpeg_branding == "Chrome") || (use_linux_config && current_cpu == "arm" && arm_use_neon && ffmpeg_branding == "ChromeOS") || (use_linux_config && current_cpu == "arm" && ffmpeg_branding == "Chrome") || (use_linux_config && current_cpu == "arm" && ffmpeg_branding == "ChromeOS")) {
++  ffmpeg_c_sources += [
++    "libavcodec/arm/hevcdsp_init_arm.c"
++  ]
++
+   ffmpeg_c_sources += [
+     "libavcodec/arm/h264chroma_init_arm.c",
+     "libavcodec/arm/h264dsp_init_arm.c",
+@@ -598,6 +644,17 @@ if ((use_linux_config && current_cpu == "arm" && arm_use_neon && ffmpeg_branding
+ }
+ 
+ if ((use_linux_config && current_cpu == "arm" && arm_use_neon && ffmpeg_branding == "Chrome") || (use_linux_config && current_cpu == "arm" && arm_use_neon && ffmpeg_branding == "ChromeOS")) {
++  ffmpeg_c_sources += [
++    "libavcodec/arm/hevcdsp_init_neon.c"
++  ]
++
++  ffmpeg_gas_sources += [
++    "libavcodec/arm/hevcdsp_deblock_neon.S",
++    "libavcodec/arm/hevcdsp_idct_neon.S",
++    "libavcodec/arm/hevcdsp_qpel_neon.S",
++    "libavcodec/arm/hevcdsp_sao_neon.S"
++  ]
++
+   ffmpeg_gas_sources += [
+     "libavcodec/arm/h264cmc_neon.S",
+     "libavcodec/arm/h264dsp_neon.S",
+diff --git a/libavcodec/aarch64/autorename_libavcodec_aarch64_hevcdsp_idct_neon.S b/libavcodec/aarch64/autorename_libavcodec_aarch64_hevcdsp_idct_neon.S
+new file mode 100644
+index 0000000..a17a3a4
+--- /dev/null
++++ b/libavcodec/aarch64/autorename_libavcodec_aarch64_hevcdsp_idct_neon.S
+@@ -0,0 +1,2 @@
++// File automatically generated. See crbug.com/495833.
++#include "hevcdsp_idct_neon.S"
+\ No newline at end of file
+diff --git a/libavcodec/aarch64/autorename_libavcodec_aarch64_hevcdsp_sao_neon.S b/libavcodec/aarch64/autorename_libavcodec_aarch64_hevcdsp_sao_neon.S
+new file mode 100644
+index 0000000..05c5962
+--- /dev/null
++++ b/libavcodec/aarch64/autorename_libavcodec_aarch64_hevcdsp_sao_neon.S
+@@ -0,0 +1,2 @@
++// File automatically generated. See crbug.com/495833.
++#include "hevcdsp_sao_neon.S"
+\ No newline at end of file
+diff --git a/libavcodec/autorename_libavcodec_bswapdsp.c b/libavcodec/autorename_libavcodec_bswapdsp.c
+new file mode 100644
+index 0000000..6208994
+--- /dev/null
++++ b/libavcodec/autorename_libavcodec_bswapdsp.c
+@@ -0,0 +1,2 @@
++// File automatically generated. See crbug.com/495833.
++#include "bswapdsp.c"
+\ No newline at end of file
