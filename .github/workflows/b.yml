@@ -77,7 +77,7 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           body_path: release.txt
-          files: ./*.zip
+          files: ./*.txt
           
       - name: Delete workflow runs
         if: always()
