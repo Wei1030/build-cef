@@ -211,7 +211,7 @@ index 0000000..e06ddbe
 +       return "Other/None";
 +     case ABI::Windows::Media::Effects::AudioEffectType_AcousticEchoCancellation:
 diff --git a/cef/tools/make_distrib.py b/cef/tools/make_distrib.py
-index 7122fae..c01419e 100644
+index 7122fae..88113e3 100644
 --- a/cef/tools/make_distrib.py
 +++ b/cef/tools/make_distrib.py
 @@ -941,7 +941,14 @@ if platform == 'windows':
@@ -224,6 +224,19 @@ index 7122fae..c01419e 100644
 +      # ThinLTO/libc++ and is not usable, so never fall back to it. If the
 +      # *_sandbox configuration was not built (e.g. sandbox support disabled),
 +      # cef_sandbox.lib is simply not included in the distribution.
++      sandbox_dir, main_dir = dirs[dir_name]
++      src_dirs = [sandbox_dir] if path_exists(sandbox_dir) else [main_dir]
++      for src_dir in src_dirs:
+         if path_exists(os.path.join(src_dir, cef_sandbox_lib)):
+           dst_dir = os.path.join(output_dir, dir_name)
+           make_dir(dst_dir, options.quiet)
+@@ -1063,7 +1070,11 @@ elif platform == 'mac':
+         'Release': (build_dir_release + '_sandbox', build_dir_release)
+     }
+     for dir_name in dirs.keys():
+-      for src_dir in dirs[dir_name]:
++      # Same as Windows: never fall back to the ThinLTO/libc++ main build
++      # directory when a separate *_sandbox configuration exists.
 +      sandbox_dir, main_dir = dirs[dir_name]
 +      src_dirs = [sandbox_dir] if path_exists(sandbox_dir) else [main_dir]
 +      for src_dir in src_dirs:

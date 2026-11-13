@@ -1,0 +1,17 @@
+diff --git a/automate/automate-git.py b/automate/automate-git.py
+index 9c0a669..d8e5784 100644
+--- a/automate/automate-git.py
++++ b/automate/automate-git.py
+@@ -1703,7 +1703,11 @@ if chromium_checkout != chromium_compat_version:
+ if not branch_is_master and chromium_checkout_changed:
+   msg('Checking for sandbox compat hash changes...')
+   tool = os.path.join(cef_src_dir, 'tools', 'version_manager.py')
+-  run('%s %s -a' % (python_exe, tool), cef_src_dir)
++  # Older release branches (e.g. 5414) don't have version_manager.py.
++  if os.path.exists(tool):
++    run('%s %s -a' % (python_exe, tool), cef_src_dir)
++  else:
++    msg('%s does not exist (skipping).' % tool)
+ 
+ ##
+ # Build CEF.

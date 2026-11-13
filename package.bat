@@ -1,11 +1,7 @@
 @echo on
 set "SCRIPT_PATH=%~dp0"
 echo SCRIPT_PATH:%SCRIPT_PATH%
+call "%SCRIPT_PATH%setenv.bat"
 
-set PATH=%SCRIPT_PATH%depot_tools\;%PATH%
-set DEPOT_TOOLS_WIN_TOOLCHAIN=0
-set GN_DEFINES=proprietary_codecs=true ffmpeg_branding=Chrome media_use_ffmpeg=true is_component_build=false is_official_build=true is_debug=false symbol_level=0 enable_nacl=false blink_symbol_level=0 v8_symbol_level=0
-set GN_ARGUMENTS=--ide=vs2022 --sln=cef --filters=//cef/*
-
-cd %SCRIPT_PATH%chromium_git\chromium\src\cef\tools
-python3.bat .\make_distrib.py --ninja-build --output-dir="%SCRIPT_PATH%output" --no-docs --minimal
+cd /d %SCRIPT_PATH%chromium_git\chromium\src\cef\tools
+call python3.bat .\make_distrib.py --ninja-build --output-dir="%SCRIPT_PATH%output" --no-docs --minimal || exit /b 1

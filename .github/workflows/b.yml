@@ -1,120 +1,335 @@
-# This is a basic workflow to help you get started with Actions
+# Builds the custom CEF distribution for Windows, Linux and macOS.
+#
+# Kept as b.yml: workflow_dispatch needs a workflow file with the same name on
+# the default branch, so this one can be run on any branch from the Actions UI
+# or with `gh workflow run b.yml --ref <branch>`.
 
 name: Build
 
-# Controls when the workflow will run
 on:
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
     inputs:
-        cef_branch: 
-            description: 'cef_branch'
-            required: false
-            default: '5414'
-  
-env:
-  CEF_BRANCH: ${{ github.event.inputs.cef_branch }}
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
-jobs:
-  build-on-windows:
-    # The type of runner that the job will run on
-    runs-on: windows-latest
+      cef_branch:
+        description: CEF branch
+        required: false
+        default: '5414'
+      windows:
+        description: Build Windows x86
+        type: boolean
+        default: true
+      linux:
+        description: Build Linux x64
+        type: boolean
+        default: true
+      macos:
+        description: Build macOS
+        type: boolean
+        default: true
+      macos_arch:
+        description: macOS architecture (x64 runs on the 4-core Intel runner, arm64 on the 3-core M1 runner)
+        type: choice
+        options: [x64, arm64]
+        default: x64
+      use_sccache:
+        description: Cache compiler output with sccache in the Actions cache, so a run that hits the 6 hour limit can be continued by running again
+        type: boolean
+        default: false
+      release:
+        description: Publish a GitHub release with the packages
+        type: boolean
+        default: true
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
+permissions:
+  contents: write  # create releases
+  actions: write   # delete old workflow runs
+
+env:
+  CEF_BRANCH: ${{ inputs.cef_branch }}
+  # Appended to GN_DEFINES by setenv.bat / setenv.sh.
+  EXTRA_GN_DEFINES: ${{ inputs.use_sccache && 'cc_wrapper=sccache' || '' }}
+  # Lets sccache store its cache in the GitHub Actions cache.
+  SCCACHE_GHA_ENABLED: ${{ inputs.use_sccache && 'true' || 'false' }}
+
+jobs:
+  windows:
+    if: inputs.windows
+    name: Windows x86
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 360
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Disable autocrlf
         shell: cmd
         run: git config --global core.autocrlf false
-        
+
       - name: Checkout
         uses: actions/checkout@v4
-        
-      - name: Cache CEF depot_tools
-        id: cache_cef
+
+      - name: Show machine info
+        shell: pwsh
+        run: |
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}, @{n='UsedGB';e={[math]::Round($_.Used/1GB,1)}}
+          "Logical CPUs: $((Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors)"
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -all -format text -property installationPath,installationVersion
+          Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\Include" | Select-Object -ExpandProperty Name
+
+      - name: Cache depot_tools and automate
+        id: cache_tools
         uses: actions/cache@v4
-        with: 
+        with:
           path: |
             automate
             depot_tools
-          key: cef-depot_tools-${{ runner.os }}
-          
-      - name: Download CEF depot_tools
-        if: steps.cache_cef.outputs.cache-hit != 'true'
+          key: tools-${{ runner.os }}-${{ hashFiles('download.bat', 'fix-automate-git.patch') }}
+
+      - name: Download depot_tools and automate
+        if: steps.cache_tools.outputs.cache-hit != 'true'
         shell: cmd
         run: download.bat
-        
-      - name: Cache Installer
-        id: cache_installer
-        uses: actions/cache@v4
-        with: 
-          path: |
-            installer
-          key: installer-${{ runner.os }}
-          
-      - name: Download Installer
-        if: steps.cache_installer.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-            mkdir .\installer
-            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2164145" -OutFile ".\installer\winsdksetup.exe"
-            Invoke-WebRequest -Uri "https://aka.ms/vs/16/release/vs_community.exe" -OutFile ".\installer\vs_community.exe"
-            
-      - name: Install vs2019
-        shell: pwsh
-        run: |
-            ([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-            Start-Process -FilePath ".\installer\vs_community.exe" -ArgumentList "--add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Component.VC.ATLMFC --includeRecommended --quiet --noUpdateInstaller --norestart" -Wait
 
-      - name: Install WinSDK with Debugging Tools
-        shell: pwsh
-        run: |
-            Start-Process -FilePath ".\installer\winsdksetup.exe" -ArgumentList "/quiet /norestart /ceip off /features OptionId.WindowsDesktopDebuggers OptionId.DesktopCPPx86 OptionId.DesktopCPPx64" -Wait
+      - name: Set up sccache
+        if: inputs.use_sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
-      - name: PrepareEnv
+      - name: Prepare sources
         shell: cmd
-        run: prepare.bat ${{ env.CEF_BRANCH }}
-        
-      - name: Create Project
+        run: prepare.bat %CEF_BRANCH%
+
+      - name: Create project
         shell: cmd
         run: create_project.bat
-        
+
       - name: Build
         shell: cmd
         run: build.bat
-        
+
+      - name: sccache stats
+        if: always() && inputs.use_sccache
+        shell: cmd
+        run: sccache --show-stats
+
       - name: Package
         shell: cmd
         run: package.bat
-        
-      - name: Generate release tag
-        id: tag
-        shell: pwsh
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: cef-windows-x86
+          path: output/*.zip
+          retention-days: 3
+          compression-level: 0
+
+  linux:
+    if: inputs.linux
+    name: Linux x64
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    env:
+      CEF_ARCH: x64
+    steps:
+      - name: Free disk space
         run: |
-            $releaseTag = Get-Date -Format "yyyy.MM.dd-HHmm"
-            echo "release_tag=${{ env.CEF_BRANCH }}_$releaseTag" >> $env:GITHUB_OUTPUT
-            Set-Content -Path release.txt -Value "${{ env.CEF_BRANCH }} $releaseTag"
+          df -h / /mnt || true
+          # Toolchains this build does not need (~30GB).
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/share/powershell \
+                      /usr/share/swift /usr/local/julia* /opt/microsoft || true
+          sudo docker image prune --all --force > /dev/null || true
+          df -h / /mnt || true
+          echo "Logical CPUs: $(nproc)"; free -g
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Put chromium_git on the larger disk
+        run: |
+          # GitHub-hosted Linux runners have a separate temporary disk at /mnt.
+          root_free=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          mnt_free=$(df --output=avail -BG /mnt 2>/dev/null | tail -1 | tr -dc '0-9' || true)
+          echo "free: / ${root_free}G, /mnt ${mnt_free:-0}G"
+          if [ "${mnt_free:-0}" -gt "$root_free" ]; then
+            sudo mkdir -p /mnt/chromium_git
+            sudo chown "$(id -u):$(id -g)" /mnt/chromium_git
+            ln -s /mnt/chromium_git chromium_git
+            echo "chromium_git -> /mnt/chromium_git"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache depot_tools and automate
+        id: cache_tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            automate
+            depot_tools
+          key: tools-${{ runner.os }}-${{ hashFiles('download.sh', 'fix-automate-git.patch') }}
+
+      - name: Download depot_tools and automate
+        if: steps.cache_tools.outputs.cache-hit != 'true'
+        run: ./download.sh
+
+      - name: Set up sccache
+        if: inputs.use_sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Prepare sources
+        run: ./prepare.sh "$CEF_BRANCH"
+
+      - name: Install build dependencies
+        run: |
+          sudo ./chromium_git/chromium/src/build/install-build-deps.sh \
+            --no-prompt --no-arm --no-chromeos-fonts --no-nacl --no-syms
+          df -h / /mnt || true
+
+      - name: Create project
+        run: ./create_project.sh
+
+      - name: Build
+        run: ./build.sh
+
+      - name: sccache stats
+        if: always() && inputs.use_sccache
+        run: sccache --show-stats
+
+      - name: Package
+        run: ./package.sh
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: cef-linux-x64
+          path: output/*.tar.bz2
+          retention-days: 3
+          compression-level: 0
+
+  macos:
+    if: inputs.macos
+    name: macOS ${{ inputs.macos_arch }}
+    runs-on: ${{ inputs.macos_arch == 'arm64' && 'macos-15' || 'macos-15-intel' }}
+    timeout-minutes: 360
+    env:
+      CEF_ARCH: ${{ inputs.macos_arch }}
+    steps:
+      - name: Free disk space
+        run: |
+          df -h /
+          echo "Logical CPUs: $(sysctl -n hw.ncpu), RAM: $(( $(sysctl -n hw.memsize) / 1073741824 ))GB"
+          xcodebuild -version
+          current="$(cd "$(xcode-select -p)/../.." && pwd -P)"
+          echo "Selected Xcode: $current"
+          # Remove the other Xcode versions (tens of GB).
+          for x in /Applications/Xcode*.app; do
+            [ "$(cd "$x" && pwd -P)" = "$current" ] && continue
+            [ -L "$x" ] && continue
+            echo "Removing $x"; sudo rm -rf "$x"
+          done
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache depot_tools and automate
+        id: cache_tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            automate
+            depot_tools
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('download.sh', 'fix-automate-git.patch') }}
+
+      - name: Download depot_tools and automate
+        if: steps.cache_tools.outputs.cache-hit != 'true'
+        run: ./download.sh
+
+      - name: Set up sccache
+        if: inputs.use_sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Prepare sources
+        run: ./prepare.sh "$CEF_BRANCH"
+
+      - name: Create project
+        run: ./create_project.sh
+
+      - name: Build
+        run: ./build.sh
+
+      - name: sccache stats
+        if: always() && inputs.use_sccache
+        run: sccache --show-stats
+
+      - name: Package
+        run: ./package.sh
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: cef-macos-${{ inputs.macos_arch }}
+          path: output/*.tar.bz2
+          retention-days: 3
+          compression-level: 0
+
+  release:
+    name: Publish release
+    needs: [windows, linux, macos]
+    if: >-
+      always() && inputs.release &&
+      (needs.windows.result == 'success' || needs.linux.result == 'success' || needs.macos.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate release tag and notes
+        id: tag
+        run: |
+          tag="${CEF_BRANCH}_$(date -u +%Y.%m.%d-%H%M)"
+          echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
+          {
+            echo "CEF ${CEF_BRANCH} custom build (${GITHUB_SHA::7})"
+            echo
+            echo "- Windows x86: ${{ needs.windows.result }}"
+            echo "- Linux x64: ${{ needs.linux.result }}"
+            echo "- macOS ${{ inputs.macos_arch }}: ${{ needs.macos.result }}"
+          } > release.txt
+          ls -la dist
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           body_path: release.txt
-          files: ./output/*.zip
-          
-      - name: Delete workflow runs
-        if: always()
+          files: |
+            dist/*.zip
+            dist/*.tar.bz2
+
+  cleanup:
+    name: Clean up old runs and releases
+    needs: [release]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old workflow runs
         uses: Mattraks/delete-workflow-runs@v2
         with:
-          retain_days: 1
-          keep_minimum_runs: 3
+          retain_days: 7
+          keep_minimum_runs: 10
 
-      - name: Remove old Releases
-        if: always()
+      - name: Remove old releases
         uses: dev-drprasad/delete-older-releases@v0.3.4
         with:
           keep_latest: 3
           delete_tags: true
-          
