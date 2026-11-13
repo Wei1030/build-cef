@@ -13,8 +13,12 @@ on:
         description: CEF branch
         required: false
         default: '5414'
-      windows:
-        description: Build Windows x86
+      windows_x86:
+        description: Build Windows x86 (32-bit)
+        type: boolean
+        default: true
+      windows_x64:
+        description: Build Windows x64 (64-bit)
         type: boolean
         default: true
       linux:
@@ -52,10 +56,17 @@ env:
 
 jobs:
   windows:
-    if: inputs.windows
-    name: Windows x86
+    if: inputs.windows_x86 || inputs.windows_x64
+    name: Windows ${{ matrix.arch }}
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        # Only the architectures selected in the inputs.
+        arch: ${{ fromJSON(format('[{0}{1}{2}]', inputs.windows_x86 && '"x86"' || '', (inputs.windows_x86 && inputs.windows_x64) && ',' || '', inputs.windows_x64 && '"x64"' || '')) }}
+    env:
+      CEF_ARCH: ${{ matrix.arch }}
     steps:
       - name: Disable autocrlf
         shell: cmd
@@ -114,7 +125,7 @@ jobs:
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: cef-windows-x86
+          name: cef-windows-${{ matrix.arch }}
           path: output/*.zip
           retention-days: 3
           compression-level: 0
@@ -300,7 +311,7 @@ jobs:
           {
             echo "CEF ${CEF_BRANCH} custom build (${GITHUB_SHA::7})"
             echo
-            echo "- Windows x86: ${{ needs.windows.result }}"
+            echo "- Windows (x86: ${{ inputs.windows_x86 }}, x64: ${{ inputs.windows_x64 }}): ${{ needs.windows.result }}"
             echo "- Linux x64: ${{ needs.linux.result }}"
             echo "- macOS ${{ inputs.macos_arch }}: ${{ needs.macos.result }}"
           } > release.txt
