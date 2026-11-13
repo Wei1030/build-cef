@@ -11,4 +11,4 @@ del /F /Q .\depot_tools.zip
 set AUTOMATE_COMMIT=b4ce724e45013510fdf6880c0b9357025e0959c5
 mkdir .\automate
 powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/chromiumembedded/cef/%AUTOMATE_COMMIT%/tools/automate/automate-git.py' -OutFile '.\automate\automate-git.py'"
-git apply fix-automate-git.patch
+call git apply fix-automate-git.patch || exit /b 1
