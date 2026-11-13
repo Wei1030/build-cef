@@ -5,6 +5,7 @@
 #   CEF_ARCH          x64 or arm64 (default: host architecture)
 #   EXTRA_GN_DEFINES  appended to GN_DEFINES, e.g. cc_wrapper=sccache
 #   BUILD_TARGETS     ninja targets for build.sh
+#   MAC_SDK_PATH      macOS only: SDK to build against (e.g. MacOSX13.0.sdk)
 
 SETENV_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$SETENV_PATH/depot_tools:$PATH"
@@ -45,6 +46,11 @@ else
   fi
   # make_distrib.py takes the framework from cefclient.app.
   : "${BUILD_TARGETS:=cefclient}"
+  # Chromium 109's clang cannot parse the SDKs of current Xcode releases
+  # (15.x); point it at the 13.0 SDK it was released with.
+  if [ -n "${MAC_SDK_PATH:-}" ]; then
+    GN_DEFINES="$GN_DEFINES mac_sdk_path=$MAC_SDK_PATH"
+  fi
 fi
 
 # make_distrib.py defaults to zip, which loses symlinks (macOS frameworks) and

@@ -248,6 +248,18 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Download macOS 13.0 SDK
+        run: |
+          # Chromium 109 was built with the 13.0 SDK; its clang 16 fails on the
+          # Foundation / Security headers of the SDK in the runner's Xcode.
+          curl -fsSL -o "$RUNNER_TEMP/sdk.tar.xz" \
+            https://github.com/joseluisq/macosx-sdks/releases/download/13.0/MacOSX13.0.sdk.tar.xz
+          tar -xJf "$RUNNER_TEMP/sdk.tar.xz" -C "$RUNNER_TEMP"
+          rm "$RUNNER_TEMP/sdk.tar.xz"
+          sdk="$RUNNER_TEMP/MacOSX13.sdk"
+          test -f "$sdk/SDKSettings.json"
+          echo "MAC_SDK_PATH=$sdk" >> "$GITHUB_ENV"
+
       - name: Cache depot_tools and automate
         id: cache_tools
         uses: actions/cache@v4
