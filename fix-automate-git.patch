@@ -1,19 +1,24 @@
 diff --git a/automate/automate-git.py b/automate/automate-git.py
-index 9c0a669..d83f306 100644
+index 9c0a669..b0c31b0 100644
 --- a/automate/automate-git.py
 +++ b/automate/automate-git.py
-@@ -1519,6 +1519,10 @@ if force_config:
+@@ -1519,6 +1519,15 @@ if force_config:
            "'siso_version': 'latest', "+
          "}, "+
          "'custom_deps': {}, "+
-+        # Skip the hook that pre-installs the vpython3 venv for src/.vpython3.
-+        # Old branches (e.g. 5414) pin wheels that are no longer published
-+        # (numpy for macOS x86_64), and the build itself uses python3.
-+        "'custom_hooks': [{'name': 'vpython3_common'}], "+
++        # Skip hooks that break on current hosts with old branches (e.g. 5414)
++        # and are not needed for this build:
++        # - vpython3_common pre-installs the venv for src/.vpython3, whose
++        #   pinned wheels are no longer published (numpy for macOS x86_64);
++        #   the build itself uses python3.
++        # - mac_toolchain downloads Google's hermetic Xcode (needs internal
++        #   CIPD access) and imports pkg_resources, which current Python /
++        #   setuptools no longer provide.
++        "'custom_hooks': [{'name': 'vpython3_common'}, {'name': 'mac_toolchain'}], "+
          "'deps_file': '" + deps_file + "', "+
          "'safesync_url': ''"+
        "}]"
-@@ -1703,7 +1707,11 @@ if chromium_checkout != chromium_compat_version:
+@@ -1703,7 +1712,11 @@ if chromium_checkout != chromium_compat_version:
  if not branch_is_master and chromium_checkout_changed:
    msg('Checking for sandbox compat hash changes...')
    tool = os.path.join(cef_src_dir, 'tools', 'version_manager.py')
