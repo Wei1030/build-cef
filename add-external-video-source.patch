@@ -1,0 +1,1013 @@
+diff --git a/cef/BUILD.gn b/cef/BUILD.gn
+index 4cae380..5fc2f13 100644
+--- a/cef/BUILD.gn
++++ b/cef/BUILD.gn
+@@ -604,6 +604,8 @@ source_set("libcef_static") {
+     "libcef/browser/extensions/value_store/cef_value_store.h",
+     "libcef/browser/extensions/value_store/cef_value_store_factory.cc",
+     "libcef/browser/extensions/value_store/cef_value_store_factory.h",
++    "libcef/browser/external_video_source.cc",
++    "libcef/browser/external_video_source.h",
+     "libcef/browser/file_dialog_manager.cc",
+     "libcef/browser/file_dialog_manager.h",
+     "libcef/browser/file_dialog_runner.cc",
+@@ -1038,6 +1040,8 @@ source_set("libcef_static") {
+     "//gpu",
+     "//ipc",
+     "//media",
++    "//media/capture:capture_lib",
++    "//media/capture/mojom:video_capture",
+     "//net",
+     "//pdf",
+     "//ppapi/buildflags",
+@@ -1045,6 +1049,8 @@ source_set("libcef_static") {
+     "//services/network:network_service",
+     "//services/network/public/cpp",
+     "//services/service_manager/public/cpp",
++    "//services/video_capture/public/mojom",
++    "//services/video_capture/public/mojom:constants",
+     "//skia",
+     "//storage/browser",
+     "//third_party/blink/public:blink",
+@@ -1054,6 +1060,7 @@ source_set("libcef_static") {
+     "//third_party/hunspell",
+     "//third_party/leveldatabase",
+     "//third_party/libxml:libxml",
++    "//third_party/libyuv",
+     "//third_party/widevine/cdm:headers",
+     "//third_party/widevine/cdm",
+     "//third_party/icu",
+diff --git a/cef/cef_paths2.gypi b/cef/cef_paths2.gypi
+index 1b876e3..92e2675 100644
+--- a/cef/cef_paths2.gypi
++++ b/cef/cef_paths2.gypi
+@@ -37,6 +37,7 @@
+       'include/base/internal/cef_thread_checker_impl.h',
+       'include/cef_api_hash.h',
+       'include/cef_base.h',
++      'include/cef_external_video.h',
+       'include/cef_version.h',
+       'include/internal/cef_export.h',
+       'include/internal/cef_ptr.h',
+diff --git a/cef/include/cef_external_video.h b/cef/include/cef_external_video.h
+new file mode 100644
+index 0000000..f914f3c
+--- /dev/null
++++ b/cef/include/cef_external_video.h
+@@ -0,0 +1,365 @@
++// Copyright (c) 2026. All rights reserved.
++//
++// External video source API (custom extension, not part of upstream CEF).
++//
++// Lets the host application push decoded YUV 4:2:0 frames (YV12 / I420) into
++// Chromium. Each source is registered as a virtual video capture device, so a
++// page can show it with:
++//
++//   const d = (await navigator.mediaDevices.enumerateDevices())
++//                 .find(x => x.kind === 'videoinput' && x.label === label);
++//   video.srcObject = await navigator.mediaDevices.getUserMedia(
++//       {video: {deviceId: {exact: d.deviceId}}, audio: false});
++//
++// Rendering then goes through the regular <video> / compositor path, so all
++// CSS (transform, object-fit, border-radius, filter, ...) applies.
++//
++// Usage notes:
++// - Call only after CefInitialize() and before CefShutdown(). Destroy every
++//   source before calling CefShutdown().
++// - All functions may be called from any thread.
++// - The page must be allowed to use the camera: either pass the
++//   "--enable-media-stream" command-line switch or implement
++//   CefPermissionHandler::OnRequestMediaAccessPermission().
++// - The page must be a secure context (file:// or a scheme registered as
++//   secure).
++// - This is a live-stream path: the newest frame is shown as soon as it
++//   arrives. Frames pushed faster than they can be delivered are dropped.
++// - Only 8-bit 4:2:0 SDR content is supported.
++
++#ifndef CEF_INCLUDE_CEF_EXTERNAL_VIDEO_H_
++#define CEF_INCLUDE_CEF_EXTERNAL_VIDEO_H_
++#pragma once
++
++#include <stdint.h>
++
++#include "include/internal/cef_export.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++///
++/// Opaque handle to an external video source.
++///
++typedef struct _cef_external_video_t cef_external_video_t;
++
++// ---------------------------------------------------------------------------
++// Color description
++// ---------------------------------------------------------------------------
++//
++// YUV numbers only become colors once you know how they were encoded. That is
++// described by four independent parameters (see cef_external_video_color_t):
++//
++//   matrix     YUV <-> RGB conversion coefficients. Wrong value: slight hue
++//              shift (reds/greens/skin tones).
++//   range      Limited (Y 16..235) or full (Y 0..255). Wrong value: very
++//              visible (washed-out grey, or crushed blacks / blown highlights).
++//   primaries  Which red/green/blue the RGB values refer to (color gamut).
++//              Wrong value: colors too dull or too saturated.
++//   transfer   Brightness curve (gamma). Wrong value: brightness/contrast off.
++//
++// The numeric values of primaries / transfer / matrix are the code points of
++// ITU-T H.273 (ISO/IEC 23091-2). They are the same numbers that are carried
++// in the bitstream and exposed by most decoders, so they can usually be passed
++// through unchanged:
++//
++//   H.264 / H.265 VUI (SPS):
++//       colour_primaries          -> primaries
++//       transfer_characteristics  -> transfer
++//       matrix_coefficients       -> matrix
++//       video_full_range_flag     -> range (0 -> LIMITED, 1 -> FULL)
++//     If video_signal_type_present_flag or colour_description_present_flag is
++//     0, the stream says nothing: use UNSPECIFIED (2) for the missing fields
++//     (and range UNSPECIFIED if video_signal_type_present_flag is 0).
++//   AV1 sequence header color_config: color_primaries, transfer_characteristics,
++//     matrix_coefficients, color_range (0 -> LIMITED, 1 -> FULL).
++//   FFmpeg: AVFrame::color_primaries, color_trc, colorspace, color_range. All
++//     four use exactly the numbers below (AVColorRange: 0 unspecified,
++//     1 MPEG = limited, 2 JPEG = full); cast directly. Note that the
++//     "yuvj420p" pixel format also means full range.
++//   Intel oneVPL / Media SDK (mfxExtVideoSignalInfo): ColourPrimaries,
++//     TransferCharacteristics, MatrixCoefficients (H.273 numbers),
++//     VideoFullRange (0 -> LIMITED, 1 -> FULL).
++//   NVIDIA Video Codec SDK (CUVIDEOFORMAT::video_signal_description):
++//     color_primaries, transfer_characteristics, matrix_coefficients (H.273
++//     numbers), video_full_range_flag (0 -> LIMITED, 1 -> FULL).
++//   Windows Media Foundation (MF_MT_VIDEO_PRIMARIES, MF_MT_TRANSFER_FUNCTION,
++//     MF_MT_YUV_MATRIX, MF_MT_VIDEO_NOMINAL_RANGE) and DXGI_COLOR_SPACE_TYPE
++//     use their OWN numbering: convert by name (e.g. MFVideoTransferMatrix_BT709
++//     -> MATRIX_BT709, MFVideoTransferMatrix_BT601 -> MATRIX_SMPTE170M,
++//     MFNominalRange_16_235 -> RANGE_LIMITED, MFNominalRange_0_255 ->
++//     RANGE_FULL); do NOT cast the numbers.
++//   libvpx (VP9) vpx_image_t::cs also uses its own enum: VPX_CS_BT_601 ->
++//     MATRIX_SMPTE170M, VPX_CS_BT_709 -> MATRIX_BT709, VPX_CS_SMPTE_170 ->
++//     MATRIX_SMPTE170M, VPX_CS_SMPTE_240 -> MATRIX_SMPTE240M, VPX_CS_BT_2020 ->
++//     MATRIX_BT2020_NCL; vpx_image_t::range: VPX_CR_STUDIO_RANGE -> LIMITED,
++//     VPX_CR_FULL_RANGE -> FULL. Primaries/transfer: UNSPECIFIED.
++//   Decoders that give you only pixels (e.g. many camera vendor playback SDKs
++//     that call back with YV12): you know nothing, use UNSPECIFIED for all
++//     four and verify the range visually (see below).
++//
++// Unknown / unspecified handling: values not listed below (0, 3, reserved
++// numbers, ...) are treated as UNSPECIFIED. Unspecified fields are guessed
++// from the specified ones. If primaries, transfer and matrix are all
++// unspecified, the frame size decides: height >= 720 -> BT.709, otherwise
++// BT.601 (SMPTE 170M), which is what FFmpeg and most players do. Unspecified
++// range means LIMITED.
++//
++// Practical advice when nothing is signaled:
++// - HD (720p and up) content: BT.709 + LIMITED is by far the most common.
++// - SD content: BT.601 (SMPTE170M) + LIMITED.
++// - Many IP / surveillance cameras encode FULL range ("yuvj420p" in FFmpeg).
++//   If the picture looks too contrasty with black areas crushed, it is full
++//   range shown as limited; if it looks grey and washed out, it is limited
++//   range shown as full.
++// - Do NOT label everything BT.2020 "to be safe": the label must describe how
++//   the pixels were actually encoded. BT.709 content labeled BT.2020 is shown
++//   with shifted hues and oversaturated colors.
++
++///
++/// Color primaries (ITU-T H.273 Table 2, "ColourPrimaries").
++///
++typedef enum {
++  /// BT.709 / sRGB / sYCC / IEC 61966-2-1. HD video, most cameras, the web.
++  CEF_EXTERNAL_VIDEO_PRIMARIES_BT709 = 1,
++  /// Unknown: guessed (see above).
++  CEF_EXTERNAL_VIDEO_PRIMARIES_UNSPECIFIED = 2,
++  /// BT.470 System M (1953 NTSC), FCC Title 47.
++  CEF_EXTERNAL_VIDEO_PRIMARIES_BT470M = 4,
++  /// BT.470 System B/G, BT.601 625-line (PAL/SECAM SD), BT.1700 625 PAL.
++  CEF_EXTERNAL_VIDEO_PRIMARIES_BT470BG = 5,
++  /// SMPTE 170M, BT.601 525-line (NTSC SD), BT.1700 NTSC.
++  CEF_EXTERNAL_VIDEO_PRIMARIES_SMPTE170M = 6,
++  /// SMPTE 240M (same primaries as SMPTE 170M).
++  CEF_EXTERNAL_VIDEO_PRIMARIES_SMPTE240M = 7,
++  /// Generic film (color filters using Illuminant C).
++  CEF_EXTERNAL_VIDEO_PRIMARIES_FILM = 8,
++  /// BT.2020 / BT.2100. UHD wide color gamut (normally 10-bit HDR).
++  CEF_EXTERNAL_VIDEO_PRIMARIES_BT2020 = 9,
++  /// SMPTE ST 428-1 (CIE 1931 XYZ, digital cinema).
++  CEF_EXTERNAL_VIDEO_PRIMARIES_SMPTEST428_1 = 10,
++  /// SMPTE RP 431-2 (DCI-P3, DCI white point).
++  CEF_EXTERNAL_VIDEO_PRIMARIES_SMPTEST431_2 = 11,
++  /// SMPTE EG 432-1 (Display P3, D65 white point).
++  CEF_EXTERNAL_VIDEO_PRIMARIES_SMPTEST432_1 = 12,
++  /// EBU Tech 3213-E (JEDEC P22 phosphors).
++  CEF_EXTERNAL_VIDEO_PRIMARIES_EBU3213E = 22,
++} cef_external_video_primaries_t;
++
++///
++/// Transfer characteristics (ITU-T H.273 Table 3,
++/// "TransferCharacteristics").
++///
++typedef enum {
++  /// BT.709. Also the curve used by BT.601 and SDR BT.2020 content.
++  CEF_EXTERNAL_VIDEO_TRANSFER_BT709 = 1,
++  /// Unknown: guessed (see above).
++  CEF_EXTERNAL_VIDEO_TRANSFER_UNSPECIFIED = 2,
++  /// Assumed display gamma 2.2 (BT.470 System M).
++  CEF_EXTERNAL_VIDEO_TRANSFER_GAMMA22 = 4,
++  /// Assumed display gamma 2.8 (BT.470 System B/G).
++  CEF_EXTERNAL_VIDEO_TRANSFER_GAMMA28 = 5,
++  /// SMPTE 170M / BT.601 (functionally the same curve as BT709 = 1).
++  CEF_EXTERNAL_VIDEO_TRANSFER_SMPTE170M = 6,
++  /// SMPTE 240M.
++  CEF_EXTERNAL_VIDEO_TRANSFER_SMPTE240M = 7,
++  /// Linear light.
++  CEF_EXTERNAL_VIDEO_TRANSFER_LINEAR = 8,
++  /// Logarithmic, 100:1 range.
++  CEF_EXTERNAL_VIDEO_TRANSFER_LOG = 9,
++  /// Logarithmic, 100 * sqrt(10) : 1 range.
++  CEF_EXTERNAL_VIDEO_TRANSFER_LOG_SQRT = 10,
++  /// IEC 61966-2-4 (xvYCC).
++  CEF_EXTERNAL_VIDEO_TRANSFER_IEC61966_2_4 = 11,
++  /// BT.1361 extended color gamut.
++  CEF_EXTERNAL_VIDEO_TRANSFER_BT1361_ECG = 12,
++  /// IEC 61966-2-1 (sRGB / sYCC). Typical for JPEG-like full range sources.
++  CEF_EXTERNAL_VIDEO_TRANSFER_IEC61966_2_1 = 13,
++  /// BT.2020 10-bit (same curve as BT709 = 1).
++  CEF_EXTERNAL_VIDEO_TRANSFER_BT2020_10 = 14,
++  /// BT.2020 12-bit (same curve as BT709 = 1).
++  CEF_EXTERNAL_VIDEO_TRANSFER_BT2020_12 = 15,
++  /// SMPTE ST 2084 / BT.2100 PQ (HDR10). HDR: not meaningful for this 8-bit
++  /// path, avoid.
++  CEF_EXTERNAL_VIDEO_TRANSFER_SMPTEST2084 = 16,
++  /// SMPTE ST 428-1.
++  CEF_EXTERNAL_VIDEO_TRANSFER_SMPTEST428_1 = 17,
++  /// ARIB STD-B67 / BT.2100 HLG. HDR: not meaningful for this 8-bit path,
++  /// avoid.
++  CEF_EXTERNAL_VIDEO_TRANSFER_ARIB_STD_B67 = 18,
++} cef_external_video_transfer_t;
++
++///
++/// Matrix coefficients (ITU-T H.273 Table 4, "MatrixCoefficients").
++/// Values 0 (identity / RGB), 12, 13 and 14 are not usable for YUV 4:2:0 input
++/// in this Chromium version and are treated as UNSPECIFIED.
++///
++typedef enum {
++  /// BT.709. HD video, most cameras.
++  CEF_EXTERNAL_VIDEO_MATRIX_BT709 = 1,
++  /// Unknown: guessed (see above).
++  CEF_EXTERNAL_VIDEO_MATRIX_UNSPECIFIED = 2,
++  /// FCC Title 47 (old NTSC).
++  CEF_EXTERNAL_VIDEO_MATRIX_FCC = 4,
++  /// BT.470 System B/G, BT.601 625-line (same coefficients as SMPTE170M = 6).
++  CEF_EXTERNAL_VIDEO_MATRIX_BT470BG = 5,
++  /// SMPTE 170M, BT.601 525-line. "BT.601" in most libraries means this.
++  CEF_EXTERNAL_VIDEO_MATRIX_SMPTE170M = 6,
++  /// SMPTE 240M.
++  CEF_EXTERNAL_VIDEO_MATRIX_SMPTE240M = 7,
++  /// YCgCo.
++  CEF_EXTERNAL_VIDEO_MATRIX_YCOCG = 8,
++  /// BT.2020 non-constant luminance (the common BT.2020 / BT.2100 YCbCr).
++  CEF_EXTERNAL_VIDEO_MATRIX_BT2020_NCL = 9,
++  /// BT.2020 constant luminance (rare).
++  CEF_EXTERNAL_VIDEO_MATRIX_BT2020_CL = 10,
++  /// SMPTE ST 2085 (Y'D'zD'x, rare).
++  CEF_EXTERNAL_VIDEO_MATRIX_YDZDX = 11,
++} cef_external_video_matrix_t;
++
++///
++/// Value range. NOTE: this is not an H.273 code point; convert from
++/// video_full_range_flag as 0 -> LIMITED, 1 -> FULL. The numbers do match
++/// FFmpeg's AVColorRange.
++///
++typedef enum {
++  /// Unknown: treated as LIMITED.
++  CEF_EXTERNAL_VIDEO_RANGE_UNSPECIFIED = 0,
++  /// Limited / "TV" / "MPEG" / studio range: Y 16..235, U/V 16..240.
++  /// Used by almost all broadcast and internet video.
++  CEF_EXTERNAL_VIDEO_RANGE_LIMITED = 1,
++  /// Full / "PC" / "JPEG" range: Y, U, V 0..255. Used by JPEG/MJPEG and many
++  /// IP / surveillance cameras ("yuvj420p").
++  CEF_EXTERNAL_VIDEO_RANGE_FULL = 2,
++} cef_external_video_range_t;
++
++///
++/// Color description of a frame. Each field takes a value of the enum named
++/// in its comment; plain ints are used so values coming from other libraries
++/// can be assigned without casts.
++///
++typedef struct _cef_external_video_color_t {
++  /// cef_external_video_primaries_t (H.273 ColourPrimaries).
++  int primaries;
++  /// cef_external_video_transfer_t (H.273 TransferCharacteristics).
++  int transfer;
++  /// cef_external_video_matrix_t (H.273 MatrixCoefficients).
++  int matrix;
++  /// cef_external_video_range_t.
++  int range;
++} cef_external_video_color_t;
++
++///
++/// Defaults used by cef_external_video_create() when 0 is passed.
++/// 8192 x 8192 covers 4K, 8K UHD (7680x4320), DCI 8K (8192x4320) and their
++/// portrait variants, matches the largest picture common hardware decoders
++/// accept, and stays within the 8192 texture limit of Direct3D 10 class GPUs.
++///
++#define CEF_EXTERNAL_VIDEO_DEFAULT_MAX_WIDTH 8192
++#define CEF_EXTERNAL_VIDEO_DEFAULT_MAX_HEIGHT 8192
++#define CEF_EXTERNAL_VIDEO_DEFAULT_MAX_FPS 30.0f
++
++///
++/// Creates a source and registers it as a virtual video capture device.
++///
++/// |device_id| must be unique among all sources (UTF-8). |label| is the
++/// device label the page sees in enumerateDevices() (UTF-8); it is the value
++/// the page should match on, because the deviceId seen by the page is hashed
++/// per origin.
++///
++/// |max_width| x |max_height| @ |max_fps| is registered as the device's only
++/// supported format. Pass 0 for any of them to use the defaults above. What
++/// they affect:
++/// - Upper bound of the frame size: cef_external_video_push_frame() rejects
++///   larger frames. Smaller frames are shown unchanged (never upscaled), so a
++///   large value costs nothing; buffers are sized per actual frame.
++/// - getUserMedia() constraints are checked against this format (e.g. asking
++///   for {width: {min: 3840}} fails if max_width is 1920), and
++///   track.getSettings() reports it as width/height. Use video.videoWidth /
++///   video.videoHeight in the page for the real frame size.
++/// - |max_fps| sets the "no signal" timeout: when no frame arrives for
++///   25 / max_fps seconds (100 / max_fps before the first frame) the track
++///   becomes muted (track.onmute), and unmuted again with the next frame. The
++///   last frame stays on screen. Use the stream's nominal frame rate.
++///
++/// Returns NULL if the arguments are invalid (negative values, a size above
++/// 32767 per side or 16384 x 16384 pixels in total, max_fps above 1000) or CEF
++/// is not initialized.
++///
++CEF_EXPORT cef_external_video_t* cef_external_video_create(
++    const char* device_id,
++    const char* label,
++    int max_width,
++    int max_height,
++    float max_fps);
++
++///
++/// Pushes one YUV 4:2:0 planar 8-bit frame. The planes are given explicitly,
++/// so the same call works for YV12 (plane order Y, V, U in memory) and I420
++/// (Y, U, V): just pass the right pointers. Chroma planes are
++/// ((width + 1) / 2) x ((height + 1) / 2).
++///
++/// |color| describes how this frame was encoded and may differ from frame to
++/// frame (normally it only changes when the stream's SPS changes, but passing
++/// the same value with every frame is cheap). NULL means "all unspecified".
++///
++/// The data is copied before this function returns. |timestamp_us| is the
++/// presentation timestamp in microseconds and should increase monotonically.
++/// |width| and |height| may change between calls but must not exceed the
++/// maximum given to cef_external_video_create().
++///
++/// Returns 1 if the frame was accepted, 0 if it was rejected (invalid
++/// arguments, the source is being destroyed, or the connection to the video
++/// capture service was lost; in the last case destroy the source and create a
++/// new one). An accepted frame may still be dropped later in favour of a newer
++/// one. Do not call this concurrently with cef_external_video_destroy() on the
++/// same source.
++///
++CEF_EXPORT int cef_external_video_push_frame(
++    cef_external_video_t* source,
++    const uint8_t* y,
++    int y_stride,
++    const uint8_t* u,
++    int u_stride,
++    const uint8_t* v,
++    int v_stride,
++    int width,
++    int height,
++    int64_t timestamp_us,
++    const cef_external_video_color_t* color);
++
++///
++/// Unregisters the device and frees the source. Pages that are showing it see
++/// the track end. |source| must not be used afterwards.
++///
++CEF_EXPORT void cef_external_video_destroy(cef_external_video_t* source);
++
++///
++/// Convenience helper for a contiguous YV12 buffer: Y plane (stride |y_stride|)
++/// followed by the V plane and then the U plane (both with stride
++/// |y_stride| / 2), with no padding rows.
++///
++static inline int cef_external_video_push_yv12(
++    cef_external_video_t* source,
++    const uint8_t* buffer,
++    int y_stride,
++    int width,
++    int height,
++    int64_t timestamp_us,
++    const cef_external_video_color_t* color) {
++  const int c_stride = y_stride / 2;
++  const int c_height = (height + 1) / 2;
++  const uint8_t* y = buffer;
++  const uint8_t* v = y + (int64_t)y_stride * height;
++  const uint8_t* u = v + (int64_t)c_stride * c_height;
++  return cef_external_video_push_frame(source, y, y_stride, u, c_stride, v,
++                                       c_stride, width, height, timestamp_us,
++                                       color);
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif  // CEF_INCLUDE_CEF_EXTERNAL_VIDEO_H_
+diff --git a/cef/libcef/browser/external_video_source.cc b/cef/libcef/browser/external_video_source.cc
+new file mode 100644
+index 0000000..7682699
+--- /dev/null
++++ b/cef/libcef/browser/external_video_source.cc
+@@ -0,0 +1,443 @@
++// Copyright (c) 2026. All rights reserved.
++
++#include "libcef/browser/external_video_source.h"
++
++#include <utility>
++
++#include "include/cef_external_video.h"
++#include "libcef/browser/context.h"
++
++#include "base/bind.h"
++#include "base/logging.h"
++#include "base/task/thread_pool.h"
++#include "base/time/time.h"
++#include "content/public/browser/browser_task_traits.h"
++#include "content/public/browser/browser_thread.h"
++#include "content/public/browser/video_capture_service.h"
++#include "media/capture/mojom/video_capture_buffer.mojom.h"
++#include "media/capture/video/video_capture_device_descriptor.h"
++#include "media/base/video_color_space.h"
++#include "media/capture/video_capture_types.h"
++#include "services/video_capture/public/mojom/constants.mojom.h"
++#include "services/video_capture/public/mojom/video_capture_service.mojom.h"
++#include "third_party/libyuv/include/libyuv/convert.h"
++#include "ui/gfx/geometry/rect.h"
++
++namespace cef_external_video {
++
++namespace {
++
++void ConnectToVideoSourceProviderOnUIThread(
++    mojo::PendingReceiver<video_capture::mojom::VideoSourceProvider>
++        receiver) {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  content::GetVideoCaptureService().ConnectToVideoSourceProvider(
++      std::move(receiver));
++}
++
++}  // namespace
++
++// Converts the H.273-based description from the C API into a gfx::ColorSpace.
++// See include/cef_external_video.h for the rules.
++gfx::ColorSpace ToGfxColorSpace(const cef_external_video_color_t* color,
++                                int height) {
++  using VCS = media::VideoColorSpace;
++  VCS::PrimaryID primaries = VCS::PrimaryID::UNSPECIFIED;
++  VCS::TransferID transfer = VCS::TransferID::UNSPECIFIED;
++  VCS::MatrixID matrix = VCS::MatrixID::UNSPECIFIED;
++  gfx::ColorSpace::RangeID range = gfx::ColorSpace::RangeID::LIMITED;
++
++  if (color) {
++    primaries = VCS::GetPrimaryID(color->primaries);
++    if (primaries == VCS::PrimaryID::INVALID)
++      primaries = VCS::PrimaryID::UNSPECIFIED;
++    transfer = VCS::GetTransferID(color->transfer);
++    if (transfer == VCS::TransferID::INVALID)
++      transfer = VCS::TransferID::UNSPECIFIED;
++    matrix = VCS::GetMatrixID(color->matrix);
++    // Identity (RGB) makes no sense for YUV input.
++    if (matrix == VCS::MatrixID::INVALID || matrix == VCS::MatrixID::RGB)
++      matrix = VCS::MatrixID::UNSPECIFIED;
++    if (color->range == CEF_EXTERNAL_VIDEO_RANGE_FULL)
++      range = gfx::ColorSpace::RangeID::FULL;
++  }
++
++  const bool hd = height >= 720;
++  if (primaries == VCS::PrimaryID::UNSPECIFIED &&
++      transfer == VCS::TransferID::UNSPECIFIED &&
++      matrix == VCS::MatrixID::UNSPECIFIED) {
++    // Nothing signaled: same heuristic as FFmpeg and most players.
++    primaries = hd ? VCS::PrimaryID::BT709 : VCS::PrimaryID::SMPTE170M;
++    transfer = hd ? VCS::TransferID::BT709 : VCS::TransferID::SMPTE170M;
++    matrix = hd ? VCS::MatrixID::BT709 : VCS::MatrixID::SMPTE170M;
++  }
++
++  // Unspecified fields left at this point are guessed from the specified ones
++  // by VideoColorSpace::ToGfxColorSpace().
++  gfx::ColorSpace cs =
++      VCS(primaries, transfer, matrix, range).ToGfxColorSpace();
++  if (!cs.IsValid()) {
++    cs = hd ? gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT709,
++                              gfx::ColorSpace::TransferID::BT709,
++                              gfx::ColorSpace::MatrixID::BT709, range)
++            : gfx::ColorSpace(gfx::ColorSpace::PrimaryID::SMPTE170M,
++                              gfx::ColorSpace::TransferID::SMPTE170M,
++                              gfx::ColorSpace::MatrixID::SMPTE170M, range);
++  }
++  return cs;
++}
++
++// static
++scoped_refptr<ExternalVideoSource> ExternalVideoSource::Create(
++    const std::string& device_id,
++    const std::string& label,
++    const gfx::Size& max_size,
++    float max_fps) {
++  if (!CONTEXT_STATE_VALID()) {
++    LOG(ERROR) << "cef_external_video: CEF is not initialized";
++    return nullptr;
++  }
++  const media::VideoCaptureFormat format(max_size, max_fps,
++                                         media::PIXEL_FORMAT_I420);
++  if (device_id.empty() || max_size.IsEmpty() || !(max_fps > 0.f) ||
++      !format.IsValid()) {
++    LOG(ERROR) << "cef_external_video: invalid arguments";
++    return nullptr;
++  }
++
++  media::VideoCaptureDeviceInfo device_info(media::VideoCaptureDeviceDescriptor(
++      label.empty() ? device_id : label, device_id,
++      media::VideoCaptureApi::VIRTUAL_DEVICE));
++  device_info.supported_formats.push_back(format);
++
++  // A dedicated sequence per source keeps the per-frame memcpy off the UI
++  // thread and lets independent sources run in parallel.
++  scoped_refptr<base::SequencedTaskRunner> task_runner =
++      base::ThreadPool::CreateSequencedTaskRunner(
++          {base::TaskPriority::USER_BLOCKING,
++           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
++
++  scoped_refptr<ExternalVideoSource> source(
++      new ExternalVideoSource(task_runner, device_info, max_fps));
++
++  // The pipe can be created on any thread. The service connection itself must
++  // be requested on the UI thread; the remote end is bound on |task_runner|.
++  mojo::PendingRemote<video_capture::mojom::VideoSourceProvider> provider;
++  auto provider_receiver = provider.InitWithNewPipeAndPassReceiver();
++  content::GetUIThreadTaskRunner({})->PostTask(
++      FROM_HERE, base::BindOnce(&ConnectToVideoSourceProviderOnUIThread,
++                                std::move(provider_receiver)));
++  task_runner->PostTask(
++      FROM_HERE, base::BindOnce(&ExternalVideoSource::InitOnSequence, source,
++                                std::move(provider)));
++  return source;
++}
++
++ExternalVideoSource::ExternalVideoSource(
++    scoped_refptr<base::SequencedTaskRunner> task_runner,
++    const media::VideoCaptureDeviceInfo& device_info,
++    float max_fps)
++    : base::RefCountedDeleteOnSequence<ExternalVideoSource>(task_runner),
++      task_runner_(std::move(task_runner)),
++      device_info_(device_info),
++      max_size_(device_info.supported_formats[0].frame_size),
++      max_fps_(max_fps) {}
++
++ExternalVideoSource::~ExternalVideoSource() {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++}
++
++bool ExternalVideoSource::PushFrame(const uint8_t* y,
++                                    int y_stride,
++                                    const uint8_t* u,
++                                    int u_stride,
++                                    const uint8_t* v,
++                                    int v_stride,
++                                    int width,
++                                    int height,
++                                    int64_t timestamp_us,
++                                    const gfx::ColorSpace& color_space) {
++  const int chroma_width = (width + 1) / 2;
++  if (!y || !u || !v || width <= 0 || height <= 0 ||
++      width > max_size_.width() || height > max_size_.height() ||
++      y_stride < width || u_stride < chroma_width ||
++      v_stride < chroma_width) {
++    return false;
++  }
++
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_)
++      return false;
++  }
++
++  // I420 in Chromium wants an even coded size; odd sizes are expressed via
++  // the visible rect.
++  const gfx::Size coded_size((width + 1) & ~1, (height + 1) & ~1);
++  scoped_refptr<media::VideoFrame> frame = media::VideoFrame::CreateFrame(
++      media::PIXEL_FORMAT_I420, coded_size, gfx::Rect(width, height),
++      gfx::Size(width, height), base::Microseconds(timestamp_us));
++  if (!frame)
++    return false;
++
++  libyuv::I420Copy(y, y_stride, u, u_stride, v, v_stride,
++                   frame->writable_data(media::VideoFrame::kYPlane),
++                   frame->stride(media::VideoFrame::kYPlane),
++                   frame->writable_data(media::VideoFrame::kUPlane),
++                   frame->stride(media::VideoFrame::kUPlane),
++                   frame->writable_data(media::VideoFrame::kVPlane),
++                   frame->stride(media::VideoFrame::kVPlane), width, height);
++  frame->metadata().reference_time = base::TimeTicks::Now();
++  frame->set_color_space(color_space);
++
++  bool post_request = false;
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_)
++      return false;
++    // Newest frame wins: an older frame still waiting here is dropped.
++    pending_frame_ = std::move(frame);
++    if (!request_in_flight_) {
++      request_in_flight_ = true;
++      post_request = true;
++    }
++  }
++
++  if (post_request) {
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ExternalVideoSource::RequestBufferOnSequence,
++                       base::WrapRefCounted(this)));
++  }
++  return true;
++}
++
++void ExternalVideoSource::Shutdown() {
++  {
++    base::AutoLock lock(lock_);
++    shut_down_ = true;
++    pending_frame_ = nullptr;
++  }
++  task_runner_->PostTask(
++      FROM_HERE, base::BindOnce(&ExternalVideoSource::ShutdownOnSequence,
++                                base::WrapRefCounted(this)));
++}
++
++void ExternalVideoSource::InitOnSequence(
++    mojo::PendingRemote<video_capture::mojom::VideoSourceProvider> provider) {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_)
++      return;
++  }
++
++  // Keep the provider connection for the lifetime of the source: the video
++  // capture service shuts itself down when it has no clients.
++  provider_.Bind(std::move(provider));
++  provider_.set_disconnect_handler(base::BindOnce(
++      &ExternalVideoSource::OnConnectionError, base::Unretained(this)));
++
++  provider_->AddSharedMemoryVirtualDevice(
++      device_info_, producer_receiver_.BindNewPipeAndPassRemote(),
++      device_.BindNewPipeAndPassReceiver());
++  device_.set_disconnect_handler(base::BindOnce(
++      &ExternalVideoSource::OnConnectionError, base::Unretained(this)));
++}
++
++void ExternalVideoSource::ShutdownOnSequence() {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  // Releasing |device_| unregisters the virtual device; pages showing it see
++  // the track end and get a devicechange event.
++  device_.reset();
++  producer_receiver_.reset();
++  provider_.reset();
++  buffers_.clear();
++}
++
++void ExternalVideoSource::OnConnectionError() {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  LOG(WARNING) << "cef_external_video: lost connection to the video capture "
++                  "service for device "
++               << device_info_.descriptor.device_id;
++  {
++    base::AutoLock lock(lock_);
++    shut_down_ = true;
++    pending_frame_ = nullptr;
++    request_in_flight_ = false;
++  }
++  ShutdownOnSequence();
++}
++
++void ExternalVideoSource::RequestBufferOnSequence() {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  scoped_refptr<media::VideoFrame> frame;
++  {
++    base::AutoLock lock(lock_);
++    frame = std::move(pending_frame_);
++    if (!frame || shut_down_ || !device_.is_bound()) {
++      request_in_flight_ = false;
++      return;
++    }
++  }
++
++  const gfx::Size coded_size = frame->coded_size();
++  device_->RequestFrameBuffer(
++      coded_size, media::PIXEL_FORMAT_I420, /*strides=*/nullptr,
++      base::BindOnce(&ExternalVideoSource::OnBufferReady,
++                     base::WrapRefCounted(this), std::move(frame)));
++}
++
++void ExternalVideoSource::OnBufferReady(scoped_refptr<media::VideoFrame> frame,
++                                        int32_t buffer_id) {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++
++  if (buffer_id == video_capture::mojom::kInvalidBufferId) {
++    // All buffers are in use by consumers: drop this frame.
++    DVLOG(1) << "cef_external_video: no free buffer, frame dropped";
++  } else if (device_.is_bound()) {
++    auto it = buffers_.find(buffer_id);
++    if (it != buffers_.end() && CopyToBuffer(*frame, it->second)) {
++      media::mojom::VideoFrameInfoPtr info =
++          media::mojom::VideoFrameInfo::New();
++      info->timestamp = frame->timestamp();
++      info->metadata = frame->metadata();
++      info->metadata.frame_rate = max_fps_;
++      info->pixel_format = media::PIXEL_FORMAT_I420;
++      info->coded_size = frame->coded_size();
++      info->visible_rect = frame->visible_rect();
++      info->is_premapped = false;
++      info->color_space = frame->ColorSpace();
++      device_->OnFrameReadyInBuffer(buffer_id, std::move(info));
++    } else {
++      // Should not happen: the service acks OnNewBuffer() before replying to
++      // RequestFrameBuffer(). The reservation is not returned in this case.
++      LOG(ERROR) << "cef_external_video: unknown or too small buffer "
++                 << buffer_id;
++    }
++  }
++
++  bool request_next = false;
++  {
++    base::AutoLock lock(lock_);
++    if (pending_frame_ && !shut_down_)
++      request_next = true;
++    else
++      request_in_flight_ = false;
++  }
++  if (request_next)
++    RequestBufferOnSequence();
++}
++
++bool ExternalVideoSource::CopyToBuffer(
++    const media::VideoFrame& frame,
++    base::WritableSharedMemoryMapping& mapping) {
++  const gfx::Size& coded = frame.coded_size();
++  const size_t needed =
++      media::VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420, coded);
++  if (!mapping.IsValid() || mapping.size() < needed)
++    return false;
++
++  // Tightly packed I420, which is what the consumer assumes when no strides
++  // are sent: Y (w*h), then U and V ((w/2)*(h/2) each). |coded| is even.
++  const int w = coded.width();
++  const int h = coded.height();
++  const int cw = w / 2;
++  const int ch = h / 2;
++  uint8_t* dst_y = static_cast<uint8_t*>(mapping.memory());
++  uint8_t* dst_u = dst_y + w * h;
++  uint8_t* dst_v = dst_u + cw * ch;
++
++  libyuv::I420Copy(frame.data(media::VideoFrame::kYPlane),
++                   frame.stride(media::VideoFrame::kYPlane),
++                   frame.data(media::VideoFrame::kUPlane),
++                   frame.stride(media::VideoFrame::kUPlane),
++                   frame.data(media::VideoFrame::kVPlane),
++                   frame.stride(media::VideoFrame::kVPlane), dst_y, w, dst_u,
++                   cw, dst_v, cw, w, h);
++  return true;
++}
++
++void ExternalVideoSource::OnNewBuffer(
++    int32_t buffer_id,
++    media::mojom::VideoBufferHandlePtr buffer_handle,
++    OnNewBufferCallback callback) {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  if (buffer_handle->is_unsafe_shmem_region()) {
++    base::WritableSharedMemoryMapping mapping =
++        buffer_handle->get_unsafe_shmem_region().Map();
++    if (mapping.IsValid())
++      buffers_[buffer_id] = std::move(mapping);
++    else
++      LOG(ERROR) << "cef_external_video: failed to map buffer " << buffer_id;
++  } else {
++    LOG(ERROR) << "cef_external_video: unexpected buffer handle type";
++  }
++  std::move(callback).Run();
++}
++
++void ExternalVideoSource::OnBufferRetired(int32_t buffer_id) {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  buffers_.erase(buffer_id);
++}
++
++}  // namespace cef_external_video
++
++// C API (include/cef_external_video.h).
++
++struct _cef_external_video_t {
++  scoped_refptr<cef_external_video::ExternalVideoSource> source;
++};
++
++CEF_EXPORT cef_external_video_t* cef_external_video_create(
++    const char* device_id,
++    const char* label,
++    int max_width,
++    int max_height,
++    float max_fps) {
++  // Reject negative values here: gfx::Size would silently clamp them to 0,
++  // which means "use the default".
++  if (!device_id || max_width < 0 || max_height < 0 || !(max_fps >= 0.f))
++    return nullptr;
++  if (max_width == 0)
++    max_width = CEF_EXTERNAL_VIDEO_DEFAULT_MAX_WIDTH;
++  if (max_height == 0)
++    max_height = CEF_EXTERNAL_VIDEO_DEFAULT_MAX_HEIGHT;
++  if (max_fps == 0.f)
++    max_fps = CEF_EXTERNAL_VIDEO_DEFAULT_MAX_FPS;
++  auto source = cef_external_video::ExternalVideoSource::Create(
++      device_id, label ? label : "", gfx::Size(max_width, max_height),
++      max_fps);
++  if (!source)
++    return nullptr;
++  return new _cef_external_video_t{std::move(source)};
++}
++
++CEF_EXPORT int cef_external_video_push_frame(
++    cef_external_video_t* source,
++    const uint8_t* y,
++    int y_stride,
++    const uint8_t* u,
++    int u_stride,
++    const uint8_t* v,
++    int v_stride,
++    int width,
++    int height,
++    int64_t timestamp_us,
++    const cef_external_video_color_t* color) {
++  if (!source || !source->source)
++    return 0;
++  return source->source->PushFrame(
++             y, y_stride, u, u_stride, v, v_stride, width, height,
++             timestamp_us, cef_external_video::ToGfxColorSpace(color, height))
++             ? 1
++             : 0;
++}
++
++CEF_EXPORT void cef_external_video_destroy(cef_external_video_t* source) {
++  if (!source)
++    return;
++  if (source->source)
++    source->source->Shutdown();
++  delete source;
++}
+diff --git a/cef/libcef/browser/external_video_source.h b/cef/libcef/browser/external_video_source.h
+new file mode 100644
+index 0000000..7df3ca8
+--- /dev/null
++++ b/cef/libcef/browser/external_video_source.h
+@@ -0,0 +1,124 @@
++// Copyright (c) 2026. All rights reserved.
++//
++// Implementation of include/cef_external_video.h. See that header for the
++// public contract.
++
++#ifndef CEF_LIBCEF_BROWSER_EXTERNAL_VIDEO_SOURCE_H_
++#define CEF_LIBCEF_BROWSER_EXTERNAL_VIDEO_SOURCE_H_
++#pragma once
++
++#include <map>
++#include <string>
++
++#include "base/memory/ref_counted_delete_on_sequence.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/memory/shared_memory_mapping.h"
++#include "base/synchronization/lock.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/thread_annotations.h"
++#include "include/cef_external_video.h"
++#include "media/base/video_frame.h"
++#include "media/capture/video/video_capture_device_info.h"
++#include "mojo/public/cpp/bindings/pending_remote.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "services/video_capture/public/mojom/producer.mojom.h"
++#include "services/video_capture/public/mojom/video_source_provider.mojom.h"
++#include "services/video_capture/public/mojom/virtual_device.mojom.h"
++#include "ui/gfx/color_space.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace cef_external_video {
++
++// Converts the color description of the C API into a gfx::ColorSpace. NULL or
++// unspecified fields are resolved as documented in
++// include/cef_external_video.h; |height| is the frame height.
++gfx::ColorSpace ToGfxColorSpace(const cef_external_video_color_t* color,
++                                int height);
++
++// One external video source. Registered with the video capture service as a
++// shared-memory virtual device.
++//
++// Threading:
++// - Create(), PushFrame() and Shutdown() may be called on any thread.
++// - All mojo state lives on |task_runner_|, a dedicated sequence, so the
++//   per-frame copy into shared memory never runs on the browser UI thread.
++// - The object is ref-counted and always deleted on |task_runner_|.
++class ExternalVideoSource
++    : public base::RefCountedDeleteOnSequence<ExternalVideoSource>,
++      public video_capture::mojom::Producer {
++ public:
++  // Returns nullptr if the arguments are invalid or CEF is not initialized.
++  static scoped_refptr<ExternalVideoSource> Create(const std::string& device_id,
++                                                   const std::string& label,
++                                                   const gfx::Size& max_size,
++                                                   float max_fps);
++
++  ExternalVideoSource(const ExternalVideoSource&) = delete;
++  ExternalVideoSource& operator=(const ExternalVideoSource&) = delete;
++
++  // Copies the frame. |color_space| describes this frame. Returns false if it
++  // was rejected.
++  bool PushFrame(const uint8_t* y,
++                 int y_stride,
++                 const uint8_t* u,
++                 int u_stride,
++                 const uint8_t* v,
++                 int v_stride,
++                 int width,
++                 int height,
++                 int64_t timestamp_us,
++                 const gfx::ColorSpace& color_space);
++
++  // Unregisters the device. Further PushFrame() calls are rejected.
++  void Shutdown();
++
++  // video_capture::mojom::Producer implementation (|task_runner_| only).
++  void OnNewBuffer(int32_t buffer_id,
++                   media::mojom::VideoBufferHandlePtr buffer_handle,
++                   OnNewBufferCallback callback) override;
++  void OnBufferRetired(int32_t buffer_id) override;
++
++ private:
++  friend class base::RefCountedDeleteOnSequence<ExternalVideoSource>;
++  friend class base::DeleteHelper<ExternalVideoSource>;
++
++  ExternalVideoSource(scoped_refptr<base::SequencedTaskRunner> task_runner,
++                      const media::VideoCaptureDeviceInfo& device_info,
++                      float max_fps);
++  ~ExternalVideoSource() override;
++
++  // |task_runner_| only.
++  void InitOnSequence(
++      mojo::PendingRemote<video_capture::mojom::VideoSourceProvider> provider);
++  void ShutdownOnSequence();
++  void RequestBufferOnSequence();
++  void OnBufferReady(scoped_refptr<media::VideoFrame> frame, int32_t buffer_id);
++  bool CopyToBuffer(const media::VideoFrame& frame,
++                    base::WritableSharedMemoryMapping& mapping);
++  void OnConnectionError();
++
++  // Immutable after construction.
++  const scoped_refptr<base::SequencedTaskRunner> task_runner_;
++  const media::VideoCaptureDeviceInfo device_info_;
++  const gfx::Size max_size_;
++  const float max_fps_;
++
++  // Shared between the pushing thread(s) and |task_runner_|.
++  base::Lock lock_;
++  // Newest frame that has not been handed to a buffer request yet.
++  scoped_refptr<media::VideoFrame> pending_frame_ GUARDED_BY(lock_);
++  // True while a RequestFrameBuffer() round trip is outstanding or scheduled.
++  bool request_in_flight_ GUARDED_BY(lock_) = false;
++  bool shut_down_ GUARDED_BY(lock_) = false;
++
++  // |task_runner_| only.
++  mojo::Remote<video_capture::mojom::VideoSourceProvider> provider_;
++  mojo::Remote<video_capture::mojom::SharedMemoryVirtualDevice> device_;
++  mojo::Receiver<video_capture::mojom::Producer> producer_receiver_{this};
++  std::map<int32_t, base::WritableSharedMemoryMapping> buffers_;
++};
++
++}  // namespace cef_external_video
++
++#endif  // CEF_LIBCEF_BROWSER_EXTERNAL_VIDEO_SOURCE_H_
+diff --git a/cef/tools/cef_api_hash.py b/cef/tools/cef_api_hash.py
+index 39eefa0..13c335d 100644
+--- a/cef/tools/cef_api_hash.py
++++ b/cef/tools/cef_api_hash.py
+@@ -61,6 +61,7 @@ class cef_api_hash:
+         "cef_api_hash.h",
+         "cef_base.h",
+         "cef_config.h",
++        "cef_external_video.h",
+         "cef_version.h",
+         "internal/cef_export.h",
+         "internal/cef_ptr.h",

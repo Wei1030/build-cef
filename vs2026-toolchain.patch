@@ -1,0 +1,232 @@
+diff --git a/cef/patch/patch.cfg b/cef/patch/patch.cfg
+index 784c906..d4b0141 100644
+--- a/cef/patch/patch.cfg
++++ b/cef/patch/patch.cfg
+@@ -44,6 +44,12 @@ patches = [
+     # https://bitbucket.org/chromiumembedded/cef/issues/3356
+     'name': 'runhooks',
+   },
++  {
++    # Support Visual Studio 2026 (installed as "Microsoft Visual Studio/18")
++    # and Windows SDK versions newer than 10.0.20348.0. Must be applied after
++    # runhooks because it modifies the same files.
++    'name': 'vs2026_toolchain',
++  },
+   {
+     # Support component builds (GN is_component_build=true).
+     # https://bitbucket.org/chromiumembedded/cef/issues/1617
+diff --git a/cef/patch/patches/vs2026_toolchain.patch b/cef/patch/patches/vs2026_toolchain.patch
+new file mode 100644
+index 0000000..e06ddbe
+--- /dev/null
++++ b/cef/patch/patches/vs2026_toolchain.patch
+@@ -0,0 +1,189 @@
++diff --git build/config/win/BUILD.gn build/config/win/BUILD.gn
++index a507539..cfe223e 100644
++--- build/config/win/BUILD.gn
+++++ build/config/win/BUILD.gn
++@@ -97,6 +97,12 @@ config("compiler") {
++     # See https://crbug.com/1089996 issue #2 for details.
++     cflags += [ "/D__WRL_ENABLE_FUNCTION_STATICS__" ]
++ 
+++    # MSVC 14.5x (VS 2026) STL headers, which ATL's cstringt.h includes for
+++    # feature macros, refuse to compile with Clang < 20. Chromium's bundled
+++    # clang is older, and with libc++ only a tiny part of the MSVC STL is
+++    # reached via ATL, so allow the mismatch.
+++    cflags += [ "/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH" ]
+++
++     # Tell clang which version of MSVC to emulate.
++     cflags += [ "-fmsc-version=1916" ]
++ 
++diff --git build/toolchain/win/midl.py build/toolchain/win/midl.py
++index 1921402..d534161 100644
++--- build/toolchain/win/midl.py
+++++ build/toolchain/win/midl.py
++@@ -449,6 +449,18 @@ def main(arch, gendir, outdir, dynamic_guids, tlb, h, dlldata, iid, proxy,
++   _, mismatch, errors = filecmp.cmpfiles(midl_output_dir, outdir, common_files)
++   assert not errors
++ 
+++  if mismatch and not bool(int(os.environ.get('CEF_MIDL_STRICT', '0'))):
+++    # Newer Windows SDKs (e.g. the ones installed with VS 2026) generate
+++    # slightly different but equivalent output, for example
+++    # "#if defined(_CONTROL_FLOW_GUARD_XFG)" instead of
+++    # "#if _CONTROL_FLOW_GUARD_XFG". Use the freshly generated files instead of
+++    # failing. Set CEF_MIDL_STRICT=1 to restore the upstream behavior.
+++    print('midl.exe output differs from checked-in files in %s; using the '
+++          'generated output for: %s' % (outdir, ', '.join(mismatch)))
+++    for f in mismatch:
+++      shutil.copy(os.path.join(midl_output_dir, f), outdir)
+++    return 0
+++
++   if mismatch:
++     print('midl.exe output different from files in %s, see %s' %
++           (outdir, midl_output_dir))
++diff --git build/toolchain/win/setup_toolchain.py build/toolchain/win/setup_toolchain.py
++index 6c65b68..7d016ca 100644
++--- build/toolchain/win/setup_toolchain.py
+++++ build/toolchain/win/setup_toolchain.py
++@@ -188,7 +188,17 @@ def _LoadToolchainEnv(cpu, toolchain_root, sdk_dir, target_store):
++     # Explicitly specifying the SDK version to build with to avoid accidentally
++     # building with a new and untested SDK. This should stay in sync with the
++     # packaged toolchain in build/vs_toolchain.py.
++-    args.append('10.0.20348.0')
+++    # The version can be overridden via WINDOWS_SDK_VERSION. If it is not set
+++    # and 10.0.20348.0 is not installed (e.g. VS 2026 machines that only have a
+++    # newer SDK), let vcvarsall.bat pick the newest installed SDK.
+++    sdk_version = os.environ.get('WINDOWS_SDK_VERSION', '')
+++    if not sdk_version:
+++      sdk_root = sdk_dir or os.path.expandvars(
+++          os.path.join('%ProgramFiles(x86)%', 'Windows Kits', '10'))
+++      if os.path.isdir(os.path.join(sdk_root, 'Include', '10.0.20348.0')):
+++        sdk_version = '10.0.20348.0'
+++    if sdk_version:
+++      args.append(sdk_version)
++     variables = _LoadEnvFromBat(args)
++   return _ExtractImportantEnvironment(variables)
++ 
++diff --git build/vs_toolchain.py build/vs_toolchain.py
++index cc85b09..7f93051 100644
++--- build/vs_toolchain.py
+++++ build/vs_toolchain.py
++@@ -43,13 +43,26 @@ json_data_file = os.path.join(script_dir, 'win_toolchain.json')
++ # which makes a difference for the arm64 runtime.
++ MSVS_VERSIONS = collections.OrderedDict([
++     ('2019', '16.0'),  # Default and packaged version of Visual Studio.
+++    ('2026', '18.0'),
++     ('2022', '17.0'),
++     ('2017', '15.0'),
++ ])
++ 
+++# Installation directory name under "Microsoft Visual Studio" for versions where
+++# it differs from the version year (VS 2026 installs into ".../18/<Edition>").
+++MSVS_INSTALL_DIR_NAMES = {
+++    '2026': '18',
+++}
+++
+++
+++def _GetVisualStudioInstallDirName(version_as_year):
+++  return MSVS_INSTALL_DIR_NAMES.get(version_as_year, version_as_year)
+++
+++
++ # List of preferred VC toolset version based on MSVS
++ # Order is not relevant for this dictionary.
++ MSVC_TOOLSET_VERSION = {
+++    '2026': 'VC145',
++     '2022': 'VC143',
++     '2019': 'VC142',
++     '2017': 'VC141',
++@@ -183,7 +196,8 @@ def GetVisualStudioVersion():
++     # Checking vs%s_install environment variables.
++     # For example, vs2019_install could have the value
++     # "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community".
++-    # Only vs2017_install, vs2019_install and vs2022_install are supported.
+++    # Only vs2017_install, vs2019_install, vs2022_install and vs2026_install
+++    # are supported.
++     path = os.environ.get('vs%s_install' % version)
++     if path and os.path.exists(path):
++       available_versions.append(version)
++@@ -194,7 +208,8 @@ def GetVisualStudioVersion():
++     else:
++       program_files_path_variable = '%ProgramFiles(x86)%'
++     path = os.path.expandvars(program_files_path_variable +
++-                              '/Microsoft Visual Studio/%s' % version)
+++                              '/Microsoft Visual Studio/%s' %
+++                              _GetVisualStudioInstallDirName(version))
++     if path and any(
++         os.path.exists(os.path.join(path, edition))
++         for edition in ('Enterprise', 'Professional', 'Community', 'Preview',
++@@ -224,22 +239,23 @@ def DetectVisualStudioPath():
++     program_files_path_variable = '%ProgramFiles%'
++   else:
++     program_files_path_variable = '%ProgramFiles(x86)%'
+++  install_dir_name = _GetVisualStudioInstallDirName(version_as_year)
++   for path in (os.environ.get('vs%s_install' % version_as_year),
++                os.path.expandvars(program_files_path_variable +
++                                   '/Microsoft Visual Studio/%s/Enterprise' %
++-                                  version_as_year),
+++                                  install_dir_name),
++                os.path.expandvars(program_files_path_variable +
++                                   '/Microsoft Visual Studio/%s/Professional' %
++-                                  version_as_year),
+++                                  install_dir_name),
++                os.path.expandvars(program_files_path_variable +
++                                   '/Microsoft Visual Studio/%s/Community' %
++-                                  version_as_year),
+++                                  install_dir_name),
++                os.path.expandvars(program_files_path_variable +
++                                   '/Microsoft Visual Studio/%s/Preview' %
++-                                  version_as_year),
+++                                  install_dir_name),
++                os.path.expandvars(program_files_path_variable +
++                                   '/Microsoft Visual Studio/%s/BuildTools' %
++-                                  version_as_year)):
+++                                  install_dir_name)):
++     if path and os.path.exists(path):
++       return path
++ 
++@@ -445,8 +461,10 @@ def _CopyDebugger(target_dir, target_cpu):
++   debug_files = []
++   # The UCRT is not a redistributable component on arm64.
++   if target_cpu != 'arm64':
++-    debug_files.extend([('api-ms-win-downlevel-kernel32-l2-1-0.dll', False),
++-                        ('api-ms-win-eventing-provider-l1-1-0.dll', False)])
+++    # Optional: newer SDK installs often lack the x86 Debuggers feature and
+++    # these downlevel DLLs are not needed on Windows 10+.
+++    debug_files.extend([('api-ms-win-downlevel-kernel32-l2-1-0.dll', True),
+++                        ('api-ms-win-eventing-provider-l1-1-0.dll', True)])
++   for debug_file, is_optional in debug_files:
++     full_path = os.path.join(win_sdk_dir, 'Debuggers', target_cpu, debug_file)
++     if not os.path.exists(full_path):
++diff --git gpu/ipc/common/device_perf_info_mojom_traits.cc gpu/ipc/common/device_perf_info_mojom_traits.cc
++index c8a9793..a275b1c 100644
++--- gpu/ipc/common/device_perf_info_mojom_traits.cc
+++++ gpu/ipc/common/device_perf_info_mojom_traits.cc
++@@ -13,7 +13,11 @@ namespace mojo {
++ gpu::mojom::Direct3DFeatureLevel
++ EnumTraits<gpu::mojom::Direct3DFeatureLevel, D3D_FEATURE_LEVEL>::ToMojom(
++     D3D_FEATURE_LEVEL d3d_feature_level) {
++-  switch (d3d_feature_level) {
+++  // Switch on the integer value so that enumerators added by newer Windows
+++  // SDKs don't trigger -Wswitch, e.g. D3D_FEATURE_LEVEL_1_0_GENERIC (0x100)
+++  // added in 10.0.26100 (the SDK installed with VS 2026).
+++  switch (static_cast<int>(d3d_feature_level)) {
+++    case 0x100:  // D3D_FEATURE_LEVEL_1_0_GENERIC
++     case D3D_FEATURE_LEVEL_1_0_CORE:
++       return gpu::mojom::Direct3DFeatureLevel::k1_0_Core;
++     case D3D_FEATURE_LEVEL_9_1:
++diff --git media/audio/win/audio_low_latency_input_win.cc media/audio/win/audio_low_latency_input_win.cc
++index 7c94385..f8002b1 100644
++--- media/audio/win/audio_low_latency_input_win.cc
+++++ media/audio/win/audio_low_latency_input_win.cc
++@@ -153,7 +153,10 @@ const char* StreamOpenResultToString(
++ 
++ const char* EffectTypeToString(
++     ABI::Windows::Media::Effects::AudioEffectType type) {
++-  switch (type) {
+++  // Switch on the integer value so that enumerators added by newer Windows
+++  // SDKs (e.g. AudioEffectType_DeepNoiseSuppression in 10.0.26100) don't
+++  // trigger -Wswitch; they are reported as "Unknown".
+++  switch (static_cast<int>(type)) {
++     case ABI::Windows::Media::Effects::AudioEffectType_Other:
++       return "Other/None";
++     case ABI::Windows::Media::Effects::AudioEffectType_AcousticEchoCancellation:
+diff --git a/cef/tools/make_distrib.py b/cef/tools/make_distrib.py
+index 7122fae..c01419e 100644
+--- a/cef/tools/make_distrib.py
++++ b/cef/tools/make_distrib.py
+@@ -941,7 +941,14 @@ if platform == 'windows':
+         'Release': (build_dir_release + '_sandbox', build_dir_release)
+     }
+     for dir_name in dirs.keys():
+-      for src_dir in dirs[dir_name]:
++      # When a separate *_sandbox configuration exists (GN is_official_build),
++      # the cef_sandbox.lib in the main build directory is built with
++      # ThinLTO/libc++ and is not usable, so never fall back to it. If the
++      # *_sandbox configuration was not built (e.g. sandbox support disabled),
++      # cef_sandbox.lib is simply not included in the distribution.
++      sandbox_dir, main_dir = dirs[dir_name]
++      src_dirs = [sandbox_dir] if path_exists(sandbox_dir) else [main_dir]
++      for src_dir in src_dirs:
+         if path_exists(os.path.join(src_dir, cef_sandbox_lib)):
+           dst_dir = os.path.join(output_dir, dir_name)
+           make_dir(dst_dir, options.quiet)
