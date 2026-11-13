@@ -1,8 +1,19 @@
 diff --git a/automate/automate-git.py b/automate/automate-git.py
-index 9c0a669..d8e5784 100644
+index 9c0a669..d83f306 100644
 --- a/automate/automate-git.py
 +++ b/automate/automate-git.py
-@@ -1703,7 +1703,11 @@ if chromium_checkout != chromium_compat_version:
+@@ -1519,6 +1519,10 @@ if force_config:
+           "'siso_version': 'latest', "+
+         "}, "+
+         "'custom_deps': {}, "+
++        # Skip the hook that pre-installs the vpython3 venv for src/.vpython3.
++        # Old branches (e.g. 5414) pin wheels that are no longer published
++        # (numpy for macOS x86_64), and the build itself uses python3.
++        "'custom_hooks': [{'name': 'vpython3_common'}], "+
+         "'deps_file': '" + deps_file + "', "+
+         "'safesync_url': ''"+
+       "}]"
+@@ -1703,7 +1707,11 @@ if chromium_checkout != chromium_compat_version:
  if not branch_is_master and chromium_checkout_changed:
    msg('Checking for sandbox compat hash changes...')
    tool = os.path.join(cef_src_dir, 'tools', 'version_manager.py')
