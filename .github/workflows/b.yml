@@ -53,6 +53,10 @@ env:
   EXTRA_GN_DEFINES: ${{ inputs.use_sccache && 'cc_wrapper=sccache' || '' }}
   # Lets sccache store its cache in the GitHub Actions cache.
   SCCACHE_GHA_ENABLED: ${{ inputs.use_sccache && 'true' || 'false' }}
+  # sccache server log; the "sccache stats" step summarizes its errors (cache
+  # write errors are only logged at debug level).
+  SCCACHE_LOG: sccache::server=debug,sccache::cache=debug,opendal=warn
+  SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
 
 jobs:
   windows:
@@ -115,8 +119,8 @@ jobs:
 
       - name: sccache stats
         if: always() && inputs.use_sccache
-        shell: cmd
-        run: sccache --show-stats
+        shell: bash
+        run: ./sccache-stats.sh
 
       - name: Package
         shell: cmd
@@ -204,7 +208,7 @@ jobs:
 
       - name: sccache stats
         if: always() && inputs.use_sccache
-        run: sccache --show-stats
+        run: ./sccache-stats.sh
 
       - name: Package
         run: ./package.sh
@@ -288,7 +292,7 @@ jobs:
 
       - name: sccache stats
         if: always() && inputs.use_sccache
-        run: sccache --show-stats
+        run: ./sccache-stats.sh
 
       - name: Package
         run: ./package.sh
