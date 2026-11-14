@@ -109,12 +109,22 @@ jobs:
         shell: cmd
         run: prepare.bat %CEF_BRANCH%
 
+      # Some Blink binding objects reach exactly 260 characters (MAX_PATH)
+      # under D:\a\build-cef\build-cef. clang-cl copes with that, but sccache
+      # fails to write them on a cache hit, so configure, build and package
+      # through a junction with a 20 characters shorter prefix.
+      - name: Create short path
+        shell: cmd
+        run: mklink /J D:\w "%GITHUB_WORKSPACE%"
+
       - name: Create project
         shell: cmd
+        working-directory: D:\w
         run: create_project.bat
 
       - name: Build
         shell: cmd
+        working-directory: D:\w
         run: build.bat
 
       - name: sccache stats
@@ -124,6 +134,7 @@ jobs:
 
       - name: Package
         shell: cmd
+        working-directory: D:\w
         run: package.bat
 
       - name: Upload packages
