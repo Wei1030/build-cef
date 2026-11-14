@@ -8,7 +8,7 @@ if [ -n "$log" ] && [ -f "$log" ]; then
   echo "$log: $(wc -c < "$log") bytes; most frequent errors:"
   # Collapse hashes and numbers so identical errors group together.
   grep -iE "error|fail" "$log" \
-    | sed -E 's/^\[[^]]*\] *//; s/[0-9a-f]{16,}/H/g; s/[0-9]+/N/g' \
+    | sed -E 's/\[[^]]*\] *:? *//g;s/[0-9a-f]{16,}/H/g; s/[0-9]+/N/g' \
     | cut -c1-300 | sort | uniq -c | sort -rn | head -30
 fi
 exit 0
