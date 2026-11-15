@@ -42,6 +42,10 @@ on:
         description: Publish a GitHub release with the packages
         type: boolean
         default: true
+      release_tag:
+        description: Add the packages to this existing release instead of creating a new one (e.g. to complete a release whose macOS build failed)
+        required: false
+        default: ''
 
 permissions:
   contents: write  # create releases
@@ -105,9 +109,18 @@ jobs:
         if: inputs.use_sccache
         uses: mozilla-actions/sccache-action@v0.0.9
 
+      # Retried: fetching from chromium.googlesource.com occasionally drops.
       - name: Prepare sources
         shell: cmd
-        run: prepare.bat %CEF_BRANCH%
+        run: |
+          set n=0
+          :retry
+          set /a n+=1
+          call prepare.bat %CEF_BRANCH% && exit /b 0
+          if %n% geq 3 exit /b 1
+          echo ::warning::Prepare sources failed (attempt %n%), retrying
+          ping -n 61 127.0.0.1 > nul
+          goto retry
 
       # Some Blink binding objects reach exactly 260 characters (MAX_PATH)
       # under D:\a\build-cef\build-cef. clang-cl copes with that, but sccache
@@ -202,8 +215,15 @@ jobs:
         if: inputs.use_sccache
         uses: mozilla-actions/sccache-action@v0.0.9
 
+      # Retried: fetching from chromium.googlesource.com occasionally drops.
       - name: Prepare sources
-        run: ./prepare.sh "$CEF_BRANCH"
+        run: |
+          for i in 1 2 3; do
+            ./prepare.sh "$CEF_BRANCH" && exit 0
+            echo "::warning::Prepare sources failed (attempt $i)"
+            sleep 60
+          done
+          exit 1
 
       - name: Install build dependencies
         run: |
@@ -292,8 +312,15 @@ jobs:
         if: inputs.use_sccache
         uses: mozilla-actions/sccache-action@v0.0.9
 
+      # Retried: fetching from chromium.googlesource.com occasionally drops.
       - name: Prepare sources
-        run: ./prepare.sh "$CEF_BRANCH"
+        run: |
+          for i in 1 2 3; do
+            ./prepare.sh "$CEF_BRANCH" && exit 0
+            echo "::warning::Prepare sources failed (attempt $i)"
+            sleep 60
+          done
+          exit 1
 
       - name: Create project
         run: ./create_project.sh
@@ -332,16 +359,31 @@ jobs:
 
       - name: Generate release tag and notes
         id: tag
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
+          LINUX_RESULT: ${{ needs.linux.result }}
+          MACOS_RESULT: ${{ needs.macos.result }}
         run: |
-          tag="${CEF_BRANCH}_$(date -u +%Y.%m.%d-%H%M)"
+          tag="${RELEASE_TAG:-${CEF_BRANCH}_$(date -u +%Y.%m.%d-%H%M)}"
           echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
           {
-            echo "CEF ${CEF_BRANCH} custom build (${GITHUB_SHA::7})"
-            echo
-            echo "- Windows (x86: ${{ inputs.windows_x86 }}, x64: ${{ inputs.windows_x64 }}): ${{ needs.windows.result }}"
-            echo "- Linux x64: ${{ needs.linux.result }}"
-            echo "- macOS ${{ inputs.macos_arch }}: ${{ needs.macos.result }}"
+            if [ -z "$RELEASE_TAG" ]; then
+              echo "CEF ${CEF_BRANCH} custom build (${GITHUB_SHA::7})"
+              echo
+            fi
+            # Only the platforms built by this run.
+            if [ "$WINDOWS_RESULT" != skipped ]; then
+              echo "- Windows (x86: ${{ inputs.windows_x86 }}, x64: ${{ inputs.windows_x64 }}): $WINDOWS_RESULT (${GITHUB_SHA::7})"
+            fi
+            if [ "$LINUX_RESULT" != skipped ]; then
+              echo "- Linux x64: $LINUX_RESULT (${GITHUB_SHA::7})"
+            fi
+            if [ "$MACOS_RESULT" != skipped ]; then
+              echo "- macOS ${{ inputs.macos_arch }}: $MACOS_RESULT (${GITHUB_SHA::7})"
+            fi
           } > release.txt
+          cat release.txt
           ls -la dist
 
       - name: Upload to release
@@ -350,6 +392,8 @@ jobs:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           target_commitish: ${{ github.sha }}
           body_path: release.txt
+          # Adding to an existing release keeps its notes.
+          append_body: ${{ inputs.release_tag != '' }}
           files: |
             dist/*.zip
             dist/*.tar.bz2
