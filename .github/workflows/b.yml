@@ -5,6 +5,7 @@
 # or with `gh workflow run b.yml --ref <branch>`.
 
 name: Build
+run-name: Build ${{ inputs.cef_branch }}${{ inputs.attempt != '1' && format(' (continued, run {0})', inputs.attempt) || '' }}
 
 on:
   workflow_dispatch:
@@ -35,9 +36,9 @@ on:
         options: [x64, arm64]
         default: x64
       use_sccache:
-        description: Cache compiler output with sccache in the Actions cache, so a run that hits the 6 hour limit can be continued by running again
+        description: Cache compiler output with sccache in the Actions cache; builds that hit the 6 hour limit are then continued in a new run automatically
         type: boolean
-        default: false
+        default: true
       release:
         description: Publish a GitHub release with the packages
         type: boolean
@@ -46,6 +47,10 @@ on:
         description: Add the packages to this existing release instead of creating a new one (e.g. to complete a release whose macOS build failed)
         required: false
         default: ''
+      attempt:
+        description: Run number in a chain of continued runs (set by the workflow itself)
+        required: false
+        default: '1'
 
 permissions:
   contents: write  # create releases
@@ -61,6 +66,11 @@ env:
   # write errors are only logged at debug level).
   SCCACHE_LOG: sccache::server=debug,sccache::cache=debug,opendal=warn
   SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
+  # A build job stops its Build step this many minutes after the job started
+  # (the job limit is 360), leaving time to report and cache. With sccache, a
+  # build stopped this way is continued by a new run, up to MAX_RUNS runs.
+  BUILD_DEADLINE_MINUTES: 340
+  MAX_RUNS: 5
 
 jobs:
   windows:
@@ -75,7 +85,13 @@ jobs:
         arch: ${{ fromJSON(format('[{0}{1}{2}]', inputs.windows_x86 && '"x86"' || '', (inputs.windows_x86 && inputs.windows_x64) && ',' || '', inputs.windows_x64 && '"x64"' || '')) }}
     env:
       CEF_ARCH: ${{ matrix.arch }}
+      # Suffix of the package / time limit marker artifact names.
+      PLATFORM_KEY: windows-${{ matrix.arch }}
     steps:
+      - name: Record start time
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Disable autocrlf
         shell: cmd
         run: git config --global core.autocrlf false
@@ -135,10 +151,37 @@ jobs:
         working-directory: D:\w
         run: create_project.bat
 
+      - name: Build time budget
+        id: budget
+        shell: bash
+        run: ./ci-build-budget.sh
+
+      # build-exit is only written when the build ends by itself, not when the
+      # step is stopped at its time limit.
       - name: Build
+        id: build
+        timeout-minutes: ${{ fromJSON(steps.budget.outputs.minutes) }}
         shell: cmd
         working-directory: D:\w
-        run: build.bat
+        run: |
+          call build.bat
+          set rc=%errorlevel%
+          echo %rc%> "%RUNNER_TEMP%\build-exit"
+          exit /b %rc%
+
+      - name: Check for time limit
+        id: time_limit
+        if: always() && steps.build.outcome == 'failure'
+        shell: bash
+        run: ./ci-time-limit.sh
+
+      - name: Upload time limit marker
+        if: always() && steps.time_limit.outputs.reached == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: timeout-${{ env.PLATFORM_KEY }}
+          path: ${{ runner.temp }}/time-limit-marker
+          retention-days: 3
 
       - name: sccache stats
         if: always() && inputs.use_sccache
@@ -165,7 +208,11 @@ jobs:
     timeout-minutes: 360
     env:
       CEF_ARCH: x64
+      PLATFORM_KEY: linux-x64
     steps:
+      - name: Record start time
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Free disk space
         run: |
           df -h / /mnt || true
@@ -234,8 +281,32 @@ jobs:
       - name: Create project
         run: ./create_project.sh
 
+      - name: Build time budget
+        id: budget
+        run: ./ci-build-budget.sh
+
+      # build-exit is only written when the build ends by itself, not when the
+      # step is stopped at its time limit.
       - name: Build
-        run: ./build.sh
+        id: build
+        timeout-minutes: ${{ fromJSON(steps.budget.outputs.minutes) }}
+        run: |
+          rc=0; ./build.sh || rc=$?
+          echo "$rc" > "$RUNNER_TEMP/build-exit"
+          exit "$rc"
+
+      - name: Check for time limit
+        id: time_limit
+        if: always() && steps.build.outcome == 'failure'
+        run: ./ci-time-limit.sh
+
+      - name: Upload time limit marker
+        if: always() && steps.time_limit.outputs.reached == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: timeout-${{ env.PLATFORM_KEY }}
+          path: ${{ runner.temp }}/time-limit-marker
+          retention-days: 3
 
       - name: sccache stats
         if: always() && inputs.use_sccache
@@ -259,7 +330,11 @@ jobs:
     timeout-minutes: 360
     env:
       CEF_ARCH: ${{ inputs.macos_arch }}
+      PLATFORM_KEY: macos-${{ inputs.macos_arch }}
     steps:
+      - name: Record start time
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Free disk space
         run: |
           df -h /
@@ -325,8 +400,32 @@ jobs:
       - name: Create project
         run: ./create_project.sh
 
+      - name: Build time budget
+        id: budget
+        run: ./ci-build-budget.sh
+
+      # build-exit is only written when the build ends by itself, not when the
+      # step is stopped at its time limit.
       - name: Build
-        run: ./build.sh
+        id: build
+        timeout-minutes: ${{ fromJSON(steps.budget.outputs.minutes) }}
+        run: |
+          rc=0; ./build.sh || rc=$?
+          echo "$rc" > "$RUNNER_TEMP/build-exit"
+          exit "$rc"
+
+      - name: Check for time limit
+        id: time_limit
+        if: always() && steps.build.outcome == 'failure'
+        run: ./ci-time-limit.sh
+
+      - name: Upload time limit marker
+        if: always() && steps.time_limit.outputs.reached == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: timeout-${{ env.PLATFORM_KEY }}
+          path: ${{ runner.temp }}/time-limit-marker
+          retention-days: 3
 
       - name: sccache stats
         if: always() && inputs.use_sccache
@@ -346,25 +445,32 @@ jobs:
   release:
     name: Publish release
     needs: [windows, linux, macos]
-    if: >-
-      always() && inputs.release &&
-      (needs.windows.result == 'success' || needs.linux.result == 'success' || needs.macos.result == 'success')
+    if: always() && inputs.release
     runs-on: ubuntu-latest
+    outputs:
+      # Set when the packages were published.
+      release_tag: ${{ steps.tag.outputs.release_tag }}
     steps:
+      # Each artifact goes to dist/<name>: cef-<platform> with the packages,
+      # timeout-<platform> for a build stopped at its time limit.
       - name: Download packages
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           path: dist
-          merge-multiple: true
 
       - name: Generate release tag and notes
         id: tag
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
-          WINDOWS_RESULT: ${{ needs.windows.result }}
-          LINUX_RESULT: ${{ needs.linux.result }}
-          MACOS_RESULT: ${{ needs.macos.result }}
         run: |
+          ls -laR dist 2>/dev/null || true
+          built=$(ls -d dist/cef-* 2>/dev/null | sed 's|^dist/cef-||' || true)
+          stopped=$(ls -d dist/timeout-* 2>/dev/null | sed 's|^dist/timeout-||' || true)
+          if [ -z "$built" ]; then
+            echo "No packages to publish"
+            exit 0
+          fi
           tag="${RELEASE_TAG:-${CEF_BRANCH}_$(date -u +%Y.%m.%d-%H%M)}"
           echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
           {
@@ -372,21 +478,13 @@ jobs:
               echo "CEF ${CEF_BRANCH} custom build (${GITHUB_SHA::7})"
               echo
             fi
-            # Only the platforms built by this run.
-            if [ "$WINDOWS_RESULT" != skipped ]; then
-              echo "- Windows (x86: ${{ inputs.windows_x86 }}, x64: ${{ inputs.windows_x64 }}): $WINDOWS_RESULT (${GITHUB_SHA::7})"
-            fi
-            if [ "$LINUX_RESULT" != skipped ]; then
-              echo "- Linux x64: $LINUX_RESULT (${GITHUB_SHA::7})"
-            fi
-            if [ "$MACOS_RESULT" != skipped ]; then
-              echo "- macOS ${{ inputs.macos_arch }}: $MACOS_RESULT (${GITHUB_SHA::7})"
-            fi
+            for p in $built; do echo "- $p (${GITHUB_SHA::7})"; done
+            for p in $stopped; do echo "- $p: time limit reached, continued in the next run"; done
           } > release.txt
           cat release.txt
-          ls -la dist
 
       - name: Upload to release
+        if: steps.tag.outputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
@@ -395,8 +493,58 @@ jobs:
           # Adding to an existing release keeps its notes.
           append_body: ${{ inputs.release_tag != '' }}
           files: |
-            dist/*.zip
-            dist/*.tar.bz2
+            dist/cef-*/*.zip
+            dist/cef-*/*.tar.bz2
+
+  # Starts a new run for the builds that stopped at their time limit; with
+  # sccache it continues from the objects this run compiled.
+  continue:
+    name: Continue unfinished builds
+    needs: [windows, linux, macos, release]
+    if: always() && !cancelled() && inputs.use_sccache
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start the next run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTEMPT: ${{ inputs.attempt }}
+          # The release this run published to, so the next run adds to it.
+          RELEASE_TAG: ${{ needs.release.outputs.release_tag || inputs.release_tag }}
+          RELEASE: ${{ inputs.release }}
+          MACOS_ARCH: ${{ inputs.macos_arch }}
+          WINDOWS_X86: ${{ inputs.windows_x86 }}
+          WINDOWS_X64: ${{ inputs.windows_x64 }}
+          LINUX: ${{ inputs.linux }}
+          MACOS: ${{ inputs.macos }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
+          LINUX_RESULT: ${{ needs.linux.result }}
+          MACOS_RESULT: ${{ needs.macos.result }}
+        run: |
+          names=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[].name')
+          # A requested build without a package is continued when it stopped at
+          # its time limit, or its job was cancelled (the 6 hour job limit).
+          next() {
+            if [ "$1" = true ] && ! grep -qx "cef-$2" <<< "$names" &&
+               { grep -qx "timeout-$2" <<< "$names" || [ "$3" = cancelled ]; }; then
+              echo true
+            else
+              echo false
+            fi
+          }
+          x86=$(next "$WINDOWS_X86" windows-x86 "$WINDOWS_RESULT")
+          x64=$(next "$WINDOWS_X64" windows-x64 "$WINDOWS_RESULT")
+          linux=$(next "$LINUX" linux-x64 "$LINUX_RESULT")
+          macos=$(next "$MACOS" "macos-$MACOS_ARCH" "$MACOS_RESULT")
+          echo "Unfinished: windows_x86=$x86 windows_x64=$x64 linux=$linux macos=$macos"
+          if [ "$x86$x64$linux$macos" = falsefalsefalsefalse ]; then
+            exit 0
+          fi
+          if [ "$ATTEMPT" -ge "$MAX_RUNS" ]; then
+            echo "::error::Builds still unfinished after $MAX_RUNS runs"
+            exit 1
+          fi
+          gh workflow run b.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"             -f cef_branch="$CEF_BRANCH"             -f windows_x86="$x86" -f windows_x64="$x64" -f linux="$linux"             -f macos="$macos" -f macos_arch="$MACOS_ARCH"             -f use_sccache=true -f release="$RELEASE" -f release_tag="$RELEASE_TAG"             -f attempt="$((ATTEMPT + 1))"
+          echo "::notice::Started run $((ATTEMPT + 1)) of at most $MAX_RUNS for the unfinished builds"
 
   cleanup:
     name: Clean up old runs and releases
