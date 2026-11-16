@@ -473,6 +473,7 @@ jobs:
           fi
           tag="${RELEASE_TAG:-${CEF_BRANCH}_$(date -u +%Y.%m.%d-%H%M)}"
           echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "built=$(echo $built)" >> "$GITHUB_OUTPUT"
           {
             if [ -z "$RELEASE_TAG" ]; then
               echo "CEF ${CEF_BRANCH} custom build (${GITHUB_SHA::7})"
@@ -485,16 +486,27 @@ jobs:
 
       - name: Upload to release
         if: steps.tag.outputs.release_tag != ''
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
-          target_commitish: ${{ github.sha }}
-          body_path: release.txt
-          # Adding to an existing release keeps its notes.
-          append_body: ${{ inputs.release_tag != '' }}
-          files: |
-            dist/cef-*/*.zip
-            dist/cef-*/*.tar.bz2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.release_tag }}
+          BUILT: ${{ steps.tag.outputs.built }}
+          NEW_RELEASE: ${{ inputs.release_tag == '' }}
+        run: |
+          files=$(ls dist/cef-*/*.zip dist/cef-*/*.tar.bz2 2>/dev/null)
+          if [ "$NEW_RELEASE" = true ]; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"               --title "$TAG" --notes-file release.txt $files
+            exit 0
+          fi
+          # An existing release only gets the files and notes: moving it to
+          # another commit is refused to the workflow token when the commits
+          # differ in workflow files.
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber $files
+          # Append the notes, dropping the time limit lines of the platforms
+          # built now.
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body             | grep -vE "^- ($(echo $BUILT | tr ' ' '|')): time limit reached" > notes.txt || true
+          cat release.txt >> notes.txt
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.txt > /dev/null
+          cat notes.txt
 
   # Starts a new run for the builds that stopped at their time limit; with
   # sccache it continues from the objects this run compiled.
