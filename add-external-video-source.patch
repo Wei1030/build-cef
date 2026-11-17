@@ -422,38 +422,51 @@ index 0000000..f914f3c
 +#endif  // CEF_INCLUDE_CEF_EXTERNAL_VIDEO_H_
 diff --git a/cef/libcef/browser/external_video_source.cc b/cef/libcef/browser/external_video_source.cc
 new file mode 100644
-index 0000000..7682699
+index 0000000..55ef5b4
 --- /dev/null
 +++ b/cef/libcef/browser/external_video_source.cc
-@@ -0,0 +1,443 @@
+@@ -0,0 +1,834 @@
 +// Copyright (c) 2026. All rights reserved.
 +
 +#include "libcef/browser/external_video_source.h"
 +
++#include <cstring>
 +#include <utility>
 +
 +#include "include/cef_external_video.h"
 +#include "libcef/browser/context.h"
 +
 +#include "base/bind.h"
++#include "base/cpu.h"
 +#include "base/logging.h"
 +#include "base/task/thread_pool.h"
 +#include "base/time/time.h"
++#include "build/build_config.h"
 +#include "content/public/browser/browser_task_traits.h"
 +#include "content/public/browser/browser_thread.h"
 +#include "content/public/browser/video_capture_service.h"
++#include "media/base/video_color_space.h"
 +#include "media/capture/mojom/video_capture_buffer.mojom.h"
 +#include "media/capture/video/video_capture_device_descriptor.h"
-+#include "media/base/video_color_space.h"
 +#include "media/capture/video_capture_types.h"
 +#include "services/video_capture/public/mojom/constants.mojom.h"
 +#include "services/video_capture/public/mojom/video_capture_service.mojom.h"
 +#include "third_party/libyuv/include/libyuv/convert.h"
++#include "third_party/libyuv/include/libyuv/scale.h"
 +#include "ui/gfx/geometry/rect.h"
++
++#if defined(ARCH_CPU_X86_FAMILY) && !BUILDFLAG(IS_NACL)
++#include <immintrin.h>
++#include <avxintrin.h>
++#include <avx2intrin.h>
++#endif
 +
 +namespace cef_external_video {
 +
 +namespace {
++
++constexpr int kMaxEmptyReserveRetries = 6;
++constexpr base::TimeDelta kEmptyReserveRetryDelay = base::Milliseconds(2);
 +
 +void ConnectToVideoSourceProviderOnUIThread(
 +    mojo::PendingReceiver<video_capture::mojom::VideoSourceProvider>
@@ -461,6 +474,220 @@ index 0000000..7682699
 +  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 +  content::GetVideoCaptureService().ConnectToVideoSourceProvider(
 +      std::move(receiver));
++}
++
++// ---------------------------------------------------------------------------
++// Cross-platform non-temporal streaming plane copy (x86 SSE2/AVX2 + ARM64).
++// Bypasses CPU cache write-allocation (RFO) when writing write-once shared
++// memory frames, saving ~50% destination DRAM traffic and preserving L3 cache.
++// ---------------------------------------------------------------------------
++
++#if defined(ARCH_CPU_X86_FAMILY) && !BUILDFLAG(IS_NACL)
++
++__attribute__((target("avx2"))) void StreamCopyBytes_AVX2(const uint8_t* src,
++                                                          uint8_t* dst,
++                                                          size_t count) {
++  if (count < 64) {
++    std::memcpy(dst, src, count);
++    return;
++  }
++
++  const uintptr_t misalign = reinterpret_cast<uintptr_t>(dst) & 31u;
++  if (misalign != 0) {
++    const size_t peel = 32u - misalign;
++    std::memcpy(dst, src, peel);
++    src += peel;
++    dst += peel;
++    count -= peel;
++  }
++
++  while (count >= 64) {
++    const __m256i v0 =
++        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
++    const __m256i v1 =
++        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 32));
++    _mm256_stream_si256(reinterpret_cast<__m256i*>(dst), v0);
++    _mm256_stream_si256(reinterpret_cast<__m256i*>(dst + 32), v1);
++    src += 64;
++    dst += 64;
++    count -= 64;
++  }
++
++  if (count > 0) {
++    std::memcpy(dst, src, count);
++  }
++}
++
++void StreamCopyBytes_SSE2(const uint8_t* src, uint8_t* dst, size_t count) {
++  if (count < 64) {
++    std::memcpy(dst, src, count);
++    return;
++  }
++
++  const uintptr_t misalign = reinterpret_cast<uintptr_t>(dst) & 15u;
++  if (misalign != 0) {
++    const size_t peel = 16u - misalign;
++    std::memcpy(dst, src, peel);
++    src += peel;
++    dst += peel;
++    count -= peel;
++  }
++
++  while (count >= 64) {
++    const __m128i v0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
++    const __m128i v1 =
++        _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + 16));
++    const __m128i v2 =
++        _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + 32));
++    const __m128i v3 =
++        _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + 48));
++    _mm_stream_si128(reinterpret_cast<__m128i*>(dst), v0);
++    _mm_stream_si128(reinterpret_cast<__m128i*>(dst + 16), v1);
++    _mm_stream_si128(reinterpret_cast<__m128i*>(dst + 32), v2);
++    _mm_stream_si128(reinterpret_cast<__m128i*>(dst + 48), v3);
++    src += 64;
++    dst += 64;
++    count -= 64;
++  }
++
++  if (count > 0) {
++    std::memcpy(dst, src, count);
++  }
++}
++
++inline void StreamCopyBytes(const uint8_t* src, uint8_t* dst, size_t count) {
++  static const bool kHasAvx2 =
++      base::CPU::GetInstanceNoAllocation().has_avx2();
++  if (kHasAvx2) {
++    StreamCopyBytes_AVX2(src, dst, count);
++  } else {
++    StreamCopyBytes_SSE2(src, dst, count);
++  }
++}
++
++inline void StreamStoreFence() {
++  _mm_sfence();
++}
++
++#elif defined(ARCH_CPU_ARM64)
++
++void StreamCopyBytes(const uint8_t* src, uint8_t* dst, size_t count) {
++  if (count < 64) {
++    std::memcpy(dst, src, count);
++    return;
++  }
++
++  const uintptr_t misalign = reinterpret_cast<uintptr_t>(dst) & 15u;
++  if (misalign != 0) {
++    const size_t peel = 16u - misalign;
++    std::memcpy(dst, src, peel);
++    src += peel;
++    dst += peel;
++    count -= peel;
++  }
++
++  // Clang lowers consecutive 16-byte __builtin_nontemporal_store calls on
++  // AArch64 to native `stnp q0, q1, [dst]` non-temporal pair instructions.
++  using Vec16B = uint64_t __attribute__((vector_size(16)));
++  while (count >= 64) {
++    Vec16B v0, v1, v2, v3;
++    std::memcpy(&v0, src, 16);
++    std::memcpy(&v1, src + 16, 16);
++    std::memcpy(&v2, src + 32, 16);
++    std::memcpy(&v3, src + 48, 16);
++    auto* d = reinterpret_cast<Vec16B*>(dst);
++    __builtin_nontemporal_store(v0, d);
++    __builtin_nontemporal_store(v1, d + 1);
++    __builtin_nontemporal_store(v2, d + 2);
++    __builtin_nontemporal_store(v3, d + 3);
++    src += 64;
++    dst += 64;
++    count -= 64;
++  }
++
++  if (count > 0) {
++    std::memcpy(dst, src, count);
++  }
++}
++
++inline void StreamStoreFence() {
++  __asm__ __volatile__("dmb ishst" ::: "memory");
++}
++
++#else
++
++inline void StreamCopyBytes(const uint8_t* src, uint8_t* dst, size_t count) {
++  std::memcpy(dst, src, count);
++}
++
++inline void StreamStoreFence() {}
++
++#endif
++
++void StreamCopyPlane(const uint8_t* src,
++                     int src_stride,
++                     uint8_t* dst,
++                     int dst_stride,
++                     int visible_width,
++                     int visible_height,
++                     int coded_height) {
++  if (visible_width <= 0 || visible_height <= 0) {
++    return;
++  }
++
++  if (src_stride == visible_width && dst_stride == visible_width) {
++    StreamCopyBytes(src, dst,
++                    static_cast<size_t>(visible_width) * visible_height);
++  } else {
++    for (int row = 0; row < visible_height; ++row) {
++      uint8_t* dst_row = dst + static_cast<size_t>(row) * dst_stride;
++      StreamCopyBytes(src + static_cast<size_t>(row) * src_stride, dst_row,
++                      static_cast<size_t>(visible_width));
++      if (dst_stride > visible_width) {
++        std::memset(dst_row + visible_width, dst_row[visible_width - 1],
++                    static_cast<size_t>(dst_stride - visible_width));
++      }
++    }
++  }
++
++  // Replicate bottom row if odd height was padded up to even coded_height.
++  if (coded_height > visible_height) {
++    const uint8_t* last_row =
++        dst + static_cast<size_t>(visible_height - 1) * dst_stride;
++    for (int row = visible_height; row < coded_height; ++row) {
++      std::memcpy(dst + static_cast<size_t>(row) * dst_stride, last_row,
++                  static_cast<size_t>(dst_stride));
++    }
++  }
++}
++
++void StreamCopyI420ToMapping(const uint8_t* y,
++                             int y_stride,
++                             const uint8_t* u,
++                             int u_stride,
++                             const uint8_t* v,
++                             int v_stride,
++                             int width,
++                             int height,
++                             const gfx::Size& coded_size,
++                             uint8_t* dst_base) {
++  const int cw = coded_size.width();
++  const int ch = coded_size.height();
++  const int half_coded_w = cw / 2;
++  const int half_coded_h = ch / 2;
++  const int chroma_vis_w = (width + 1) / 2;
++  const int chroma_vis_h = (height + 1) / 2;
++
++  uint8_t* dst_y = dst_base;
++  uint8_t* dst_u = dst_y + static_cast<size_t>(cw) * ch;
++  uint8_t* dst_v = dst_u + static_cast<size_t>(half_coded_w) * half_coded_h;
++
++  StreamCopyPlane(y, y_stride, dst_y, cw, width, height, ch);
++  StreamCopyPlane(u, u_stride, dst_u, half_coded_w, chroma_vis_w, chroma_vis_h,
++                  half_coded_h);
++  StreamCopyPlane(v, v_stride, dst_v, half_coded_w, chroma_vis_w, chroma_vis_h,
++                  half_coded_h);
++  StreamStoreFence();
 +}
 +
 +}  // namespace
@@ -500,8 +727,6 @@ index 0000000..7682699
 +    matrix = hd ? VCS::MatrixID::BT709 : VCS::MatrixID::SMPTE170M;
 +  }
 +
-+  // Unspecified fields left at this point are guessed from the specified ones
-+  // by VideoColorSpace::ToGfxColorSpace().
 +  gfx::ColorSpace cs =
 +      VCS(primaries, transfer, matrix, range).ToGfxColorSpace();
 +  if (!cs.IsValid()) {
@@ -514,6 +739,11 @@ index 0000000..7682699
 +  }
 +  return cs;
 +}
++
++ExternalVideoSource::SharedBufferSlot::SharedBufferSlot(
++    int32_t id,
++    base::WritableSharedMemoryMapping map)
++    : buffer_id(id), mapping(std::move(map)) {}
 +
 +// static
 +scoped_refptr<ExternalVideoSource> ExternalVideoSource::Create(
@@ -538,8 +768,6 @@ index 0000000..7682699
 +      media::VideoCaptureApi::VIRTUAL_DEVICE));
 +  device_info.supported_formats.push_back(format);
 +
-+  // A dedicated sequence per source keeps the per-frame memcpy off the UI
-+  // thread and lets independent sources run in parallel.
 +  scoped_refptr<base::SequencedTaskRunner> task_runner =
 +      base::ThreadPool::CreateSequencedTaskRunner(
 +          {base::TaskPriority::USER_BLOCKING,
@@ -548,8 +776,6 @@ index 0000000..7682699
 +  scoped_refptr<ExternalVideoSource> source(
 +      new ExternalVideoSource(task_runner, device_info, max_fps));
 +
-+  // The pipe can be created on any thread. The service connection itself must
-+  // be requested on the UI thread; the remote end is bound on |task_runner|.
 +  mojo::PendingRemote<video_capture::mojom::VideoSourceProvider> provider;
 +  auto provider_receiver = provider.InitWithNewPipeAndPassReceiver();
 +  content::GetUIThreadTaskRunner({})->PostTask(
@@ -593,49 +819,118 @@ index 0000000..7682699
 +    return false;
 +  }
 +
-+  {
-+    base::AutoLock lock(lock_);
-+    if (shut_down_)
-+      return false;
-+  }
-+
-+  // I420 in Chromium wants an even coded size; odd sizes are expressed via
-+  // the visible rect.
 +  const gfx::Size coded_size((width + 1) & ~1, (height + 1) & ~1);
-+  scoped_refptr<media::VideoFrame> frame = media::VideoFrame::CreateFrame(
-+      media::PIXEL_FORMAT_I420, coded_size, gfx::Rect(width, height),
-+      gfx::Size(width, height), base::Microseconds(timestamp_us));
-+  if (!frame)
-+    return false;
++  scoped_refptr<SharedBufferSlot> slot;
++  gfx::Size slot_coded_size;
++  bool need_cold_start_copy = false;
++  bool post_reserve = false;
 +
-+  libyuv::I420Copy(y, y_stride, u, u_stride, v, v_stride,
-+                   frame->writable_data(media::VideoFrame::kYPlane),
-+                   frame->stride(media::VideoFrame::kYPlane),
-+                   frame->writable_data(media::VideoFrame::kUPlane),
-+                   frame->stride(media::VideoFrame::kUPlane),
-+                   frame->writable_data(media::VideoFrame::kVPlane),
-+                   frame->stride(media::VideoFrame::kVPlane), width, height);
-+  frame->metadata().reference_time = base::TimeTicks::Now();
-+  frame->set_color_space(color_space);
-+
-+  bool post_request = false;
 +  {
 +    base::AutoLock lock(lock_);
-+    if (shut_down_)
++    if (shut_down_) {
 +      return false;
-+    // Newest frame wins: an older frame still waiting here is dropped.
-+    pending_frame_ = std::move(frame);
-+    if (!request_in_flight_) {
-+      request_in_flight_ = true;
-+      post_request = true;
++    }
++
++    desired_coded_size_ = coded_size;
++
++    if (reserved_slot_) {
++      slot = std::move(reserved_slot_);
++      slot_coded_size = reserved_coded_size_;
++      // SubmitFrameOnSequence will immediately request the next buffer.
++      reserve_in_flight_ = true;
++      consecutive_empty_reserves_ = 0;
++    } else if (!has_completed_initial_reserve_) {
++      // Cold start only (before the first Mojo buffer reservation completes).
++      need_cold_start_copy = true;
++      if (device_ready_ && !reserve_in_flight_) {
++        reserve_in_flight_ = true;
++        post_reserve = true;
++      }
++    } else {
++      // Downstream buffers are all busy: drop at entry in O(1) without any
++      // heap allocation or pixel copy.
++      if (device_ready_ && !reserve_in_flight_) {
++        reserve_in_flight_ = true;
++        consecutive_empty_reserves_ = 0;
++        post_reserve = true;
++      }
++      if (post_reserve) {
++        // Post outside lock below.
++      } else {
++        return true;
++      }
 +    }
 +  }
 +
-+  if (post_request) {
++  if (slot) {
++    const size_t needed =
++        media::VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420, coded_size);
++    gfx::Size submit_coded = coded_size;
++    gfx::Rect submit_visible(width, height);
++
++    if (slot->mapping.IsValid() && slot->mapping.size() >= needed) {
++      StreamCopyI420ToMapping(
++          y, y_stride, u, u_stride, v, v_stride, width, height, coded_size,
++          static_cast<uint8_t*>(slot->mapping.memory()));
++    } else if (slot->mapping.IsValid() && !slot_coded_size.IsEmpty()) {
++      // Rare dynamic upward resolution switch while holding a smaller slot:
++      // scale this one transition frame into the held slot so the producer
++      // reservation is cleanly returned; the next reservation uses |coded_size|.
++      const int dw = slot_coded_size.width();
++      const int dh = slot_coded_size.height();
++      const int dcw = dw / 2;
++      const int dch = dh / 2;
++      uint8_t* dst_y = static_cast<uint8_t*>(slot->mapping.memory());
++      uint8_t* dst_u = dst_y + static_cast<size_t>(dw) * dh;
++      uint8_t* dst_v = dst_u + static_cast<size_t>(dcw) * dch;
++      libyuv::I420Scale(y, y_stride, u, u_stride, v, v_stride, width, height,
++                        dst_y, dw, dst_u, dcw, dst_v, dcw, dw, dh,
++                        libyuv::kFilterBilinear);
++      submit_coded = slot_coded_size;
++      submit_visible = gfx::Rect(dw, dh);
++    }
++
 +    task_runner_->PostTask(
 +        FROM_HERE,
-+        base::BindOnce(&ExternalVideoSource::RequestBufferOnSequence,
-+                       base::WrapRefCounted(this)));
++        base::BindOnce(&ExternalVideoSource::SubmitFrameOnSequence,
++                       base::WrapRefCounted(this), slot->buffer_id,
++                       submit_coded, submit_visible, timestamp_us,
++                       base::TimeTicks::Now(), color_space));
++    return true;
++  }
++
++  if (need_cold_start_copy) {
++    scoped_refptr<media::VideoFrame> frame = media::VideoFrame::CreateFrame(
++        media::PIXEL_FORMAT_I420, coded_size, gfx::Rect(width, height),
++        gfx::Size(width, height), base::Microseconds(timestamp_us));
++    if (!frame) {
++      return false;
++    }
++    libyuv::I420Copy(y, y_stride, u, u_stride, v, v_stride,
++                     frame->writable_data(media::VideoFrame::kYPlane),
++                     frame->stride(media::VideoFrame::kYPlane),
++                     frame->writable_data(media::VideoFrame::kUPlane),
++                     frame->stride(media::VideoFrame::kUPlane),
++                     frame->writable_data(media::VideoFrame::kVPlane),
++                     frame->stride(media::VideoFrame::kVPlane), width, height);
++    frame->metadata().reference_time = base::TimeTicks::Now();
++    frame->set_color_space(color_space);
++
++    base::AutoLock lock(lock_);
++    if (shut_down_) {
++      return false;
++    }
++    cold_start_frame_ = std::move(frame);
++    if (device_ready_ && !reserve_in_flight_) {
++      reserve_in_flight_ = true;
++      post_reserve = true;
++    }
++  }
++
++  if (post_reserve) {
++    task_runner_->PostTask(
++        FROM_HERE, base::BindOnce(&ExternalVideoSource::ReserveBufferOnSequence,
++                                  base::WrapRefCounted(this)));
 +  }
 +  return true;
 +}
@@ -644,7 +939,9 @@ index 0000000..7682699
 +  {
 +    base::AutoLock lock(lock_);
 +    shut_down_ = true;
-+    pending_frame_ = nullptr;
++    cold_start_frame_ = nullptr;
++    reserved_slot_ = nullptr;
++    buffers_.clear();
 +  }
 +  task_runner_->PostTask(
 +      FROM_HERE, base::BindOnce(&ExternalVideoSource::ShutdownOnSequence,
@@ -656,12 +953,11 @@ index 0000000..7682699
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 +  {
 +    base::AutoLock lock(lock_);
-+    if (shut_down_)
++    if (shut_down_) {
 +      return;
++    }
 +  }
 +
-+  // Keep the provider connection for the lifetime of the source: the video
-+  // capture service shuts itself down when it has no clients.
 +  provider_.Bind(std::move(provider));
 +  provider_.set_disconnect_handler(base::BindOnce(
 +      &ExternalVideoSource::OnConnectionError, base::Unretained(this)));
@@ -671,16 +967,36 @@ index 0000000..7682699
 +      device_.BindNewPipeAndPassReceiver());
 +  device_.set_disconnect_handler(base::BindOnce(
 +      &ExternalVideoSource::OnConnectionError, base::Unretained(this)));
++
++  bool should_reserve = false;
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_) {
++      return;
++    }
++    device_ready_ = true;
++    if (!desired_coded_size_.IsEmpty() && !reserve_in_flight_) {
++      reserve_in_flight_ = true;
++      should_reserve = true;
++    }
++  }
++
++  if (should_reserve) {
++    ReserveBufferOnSequence();
++  }
 +}
 +
 +void ExternalVideoSource::ShutdownOnSequence() {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
-+  // Releasing |device_| unregisters the virtual device; pages showing it see
-+  // the track end and get a devicechange event.
 +  device_.reset();
 +  producer_receiver_.reset();
 +  provider_.reset();
-+  buffers_.clear();
++  {
++    base::AutoLock lock(lock_);
++    reserved_slot_ = nullptr;
++    cold_start_frame_ = nullptr;
++    buffers_.clear();
++  }
 +}
 +
 +void ExternalVideoSource::OnConnectionError() {
@@ -691,99 +1007,170 @@ index 0000000..7682699
 +  {
 +    base::AutoLock lock(lock_);
 +    shut_down_ = true;
-+    pending_frame_ = nullptr;
-+    request_in_flight_ = false;
++    device_ready_ = false;
++    reserve_in_flight_ = false;
++    cold_start_frame_ = nullptr;
++    reserved_slot_ = nullptr;
++    buffers_.clear();
 +  }
 +  ShutdownOnSequence();
 +}
 +
-+void ExternalVideoSource::RequestBufferOnSequence() {
++void ExternalVideoSource::ReserveBufferOnSequence() {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
-+  scoped_refptr<media::VideoFrame> frame;
++  gfx::Size coded_size;
 +  {
 +    base::AutoLock lock(lock_);
-+    frame = std::move(pending_frame_);
-+    if (!frame || shut_down_ || !device_.is_bound()) {
-+      request_in_flight_ = false;
++    if (shut_down_ || !device_.is_bound() || desired_coded_size_.IsEmpty() ||
++        reserved_slot_) {
++      reserve_in_flight_ = false;
++      return;
++    }
++    coded_size = desired_coded_size_;
++  }
++
++  device_->RequestFrameBuffer(
++      coded_size, media::PIXEL_FORMAT_I420, /*strides=*/nullptr,
++      base::BindOnce(&ExternalVideoSource::OnBufferReserved,
++                     base::WrapRefCounted(this), coded_size));
++}
++
++void ExternalVideoSource::OnBufferReserved(gfx::Size requested_coded_size,
++                                           int32_t buffer_id) {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++
++  if (buffer_id == video_capture::mojom::kInvalidBufferId) {
++    bool schedule_retry = false;
++    {
++      base::AutoLock lock(lock_);
++      has_completed_initial_reserve_ = true;
++      cold_start_frame_ = nullptr;
++      if (!shut_down_ && device_.is_bound() &&
++          consecutive_empty_reserves_ < kMaxEmptyReserveRetries) {
++        ++consecutive_empty_reserves_;
++        schedule_retry = true;
++      } else {
++        reserve_in_flight_ = false;
++      }
++    }
++    if (schedule_retry) {
++      task_runner_->PostDelayedTask(
++          FROM_HERE,
++          base::BindOnce(&ExternalVideoSource::ReserveBufferOnSequence,
++                         base::WrapRefCounted(this)),
++          kEmptyReserveRetryDelay);
++    }
++    return;
++  }
++
++  scoped_refptr<SharedBufferSlot> slot;
++  scoped_refptr<media::VideoFrame> cold_frame;
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_ || !device_.is_bound()) {
++      reserve_in_flight_ = false;
++      return;
++    }
++
++    has_completed_initial_reserve_ = true;
++    consecutive_empty_reserves_ = 0;
++
++    auto it = buffers_.find(buffer_id);
++    if (it == buffers_.end() || !it->second || !it->second->mapping.IsValid()) {
++      LOG(ERROR) << "cef_external_video: unknown or unmapped buffer "
++                 << buffer_id;
++      reserve_in_flight_ = false;
++      return;
++    }
++    slot = it->second;
++
++    if (cold_start_frame_) {
++      cold_frame = std::move(cold_start_frame_);
++      // Keep reserve_in_flight_ = true while we flush |cold_frame| and
++      // immediately reserve the next steady-state slot.
++    } else {
++      reserved_slot_ = std::move(slot);
++      reserved_coded_size_ = requested_coded_size;
++      reserve_in_flight_ = false;
 +      return;
 +    }
 +  }
 +
-+  const gfx::Size coded_size = frame->coded_size();
-+  device_->RequestFrameBuffer(
-+      coded_size, media::PIXEL_FORMAT_I420, /*strides=*/nullptr,
-+      base::BindOnce(&ExternalVideoSource::OnBufferReady,
-+                     base::WrapRefCounted(this), std::move(frame)));
++  // Flush the one-time cold-start frame and immediately pre-reserve the next
++  // buffer for steady-state direct writes.
++  const size_t needed = media::VideoFrame::AllocationSize(
++      media::PIXEL_FORMAT_I420, cold_frame->coded_size());
++  if (slot->mapping.size() >= needed &&
++      cold_frame->coded_size() == requested_coded_size) {
++    StreamCopyI420ToMapping(
++        cold_frame->data(media::VideoFrame::kYPlane),
++        cold_frame->stride(media::VideoFrame::kYPlane),
++        cold_frame->data(media::VideoFrame::kUPlane),
++        cold_frame->stride(media::VideoFrame::kUPlane),
++        cold_frame->data(media::VideoFrame::kVPlane),
++        cold_frame->stride(media::VideoFrame::kVPlane),
++        cold_frame->visible_rect().width(),
++        cold_frame->visible_rect().height(), cold_frame->coded_size(),
++        static_cast<uint8_t*>(slot->mapping.memory()));
++    SubmitFrameOnSequence(
++        slot->buffer_id, cold_frame->coded_size(), cold_frame->visible_rect(),
++        cold_frame->timestamp().InMicroseconds(),
++        cold_frame->metadata().reference_time.value_or(base::TimeTicks::Now()),
++        cold_frame->ColorSpace());
++  } else {
++    // Resolution already changed during cold start; scale into |slot| and
++    // reserve the new desired size next.
++    const int dw = requested_coded_size.width();
++    const int dh = requested_coded_size.height();
++    const int dcw = dw / 2;
++    const int dch = dh / 2;
++    uint8_t* dst_y = static_cast<uint8_t*>(slot->mapping.memory());
++    uint8_t* dst_u = dst_y + static_cast<size_t>(dw) * dh;
++    uint8_t* dst_v = dst_u + static_cast<size_t>(dcw) * dch;
++    libyuv::I420Scale(cold_frame->data(media::VideoFrame::kYPlane),
++                      cold_frame->stride(media::VideoFrame::kYPlane),
++                      cold_frame->data(media::VideoFrame::kUPlane),
++                      cold_frame->stride(media::VideoFrame::kUPlane),
++                      cold_frame->data(media::VideoFrame::kVPlane),
++                      cold_frame->stride(media::VideoFrame::kVPlane),
++                      cold_frame->visible_rect().width(),
++                      cold_frame->visible_rect().height(), dst_y, dw, dst_u,
++                      dcw, dst_v, dcw, dw, dh, libyuv::kFilterBilinear);
++    SubmitFrameOnSequence(
++        slot->buffer_id, requested_coded_size, gfx::Rect(dw, dh),
++        cold_frame->timestamp().InMicroseconds(),
++        cold_frame->metadata().reference_time.value_or(base::TimeTicks::Now()),
++        cold_frame->ColorSpace());
++  }
 +}
 +
-+void ExternalVideoSource::OnBufferReady(scoped_refptr<media::VideoFrame> frame,
-+                                        int32_t buffer_id) {
++void ExternalVideoSource::SubmitFrameOnSequence(int32_t buffer_id,
++                                                gfx::Size coded_size,
++                                                gfx::Rect visible_rect,
++                                                int64_t timestamp_us,
++                                                base::TimeTicks reference_time,
++                                                gfx::ColorSpace color_space) {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
-+
-+  if (buffer_id == video_capture::mojom::kInvalidBufferId) {
-+    // All buffers are in use by consumers: drop this frame.
-+    DVLOG(1) << "cef_external_video: no free buffer, frame dropped";
-+  } else if (device_.is_bound()) {
-+    auto it = buffers_.find(buffer_id);
-+    if (it != buffers_.end() && CopyToBuffer(*frame, it->second)) {
-+      media::mojom::VideoFrameInfoPtr info =
-+          media::mojom::VideoFrameInfo::New();
-+      info->timestamp = frame->timestamp();
-+      info->metadata = frame->metadata();
-+      info->metadata.frame_rate = max_fps_;
-+      info->pixel_format = media::PIXEL_FORMAT_I420;
-+      info->coded_size = frame->coded_size();
-+      info->visible_rect = frame->visible_rect();
-+      info->is_premapped = false;
-+      info->color_space = frame->ColorSpace();
-+      device_->OnFrameReadyInBuffer(buffer_id, std::move(info));
-+    } else {
-+      // Should not happen: the service acks OnNewBuffer() before replying to
-+      // RequestFrameBuffer(). The reservation is not returned in this case.
-+      LOG(ERROR) << "cef_external_video: unknown or too small buffer "
-+                 << buffer_id;
-+    }
-+  }
-+
-+  bool request_next = false;
-+  {
++  if (!device_.is_bound()) {
 +    base::AutoLock lock(lock_);
-+    if (pending_frame_ && !shut_down_)
-+      request_next = true;
-+    else
-+      request_in_flight_ = false;
++    reserve_in_flight_ = false;
++    return;
 +  }
-+  if (request_next)
-+    RequestBufferOnSequence();
-+}
 +
-+bool ExternalVideoSource::CopyToBuffer(
-+    const media::VideoFrame& frame,
-+    base::WritableSharedMemoryMapping& mapping) {
-+  const gfx::Size& coded = frame.coded_size();
-+  const size_t needed =
-+      media::VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420, coded);
-+  if (!mapping.IsValid() || mapping.size() < needed)
-+    return false;
++  media::mojom::VideoFrameInfoPtr info = media::mojom::VideoFrameInfo::New();
++  info->timestamp = base::Microseconds(timestamp_us);
++  info->metadata.frame_rate = max_fps_;
++  info->metadata.reference_time = reference_time;
++  info->pixel_format = media::PIXEL_FORMAT_I420;
++  info->coded_size = coded_size;
++  info->visible_rect = visible_rect;
++  info->is_premapped = false;
++  info->color_space = color_space;
++  device_->OnFrameReadyInBuffer(buffer_id, std::move(info));
 +
-+  // Tightly packed I420, which is what the consumer assumes when no strides
-+  // are sent: Y (w*h), then U and V ((w/2)*(h/2) each). |coded| is even.
-+  const int w = coded.width();
-+  const int h = coded.height();
-+  const int cw = w / 2;
-+  const int ch = h / 2;
-+  uint8_t* dst_y = static_cast<uint8_t*>(mapping.memory());
-+  uint8_t* dst_u = dst_y + w * h;
-+  uint8_t* dst_v = dst_u + cw * ch;
-+
-+  libyuv::I420Copy(frame.data(media::VideoFrame::kYPlane),
-+                   frame.stride(media::VideoFrame::kYPlane),
-+                   frame.data(media::VideoFrame::kUPlane),
-+                   frame.stride(media::VideoFrame::kUPlane),
-+                   frame.data(media::VideoFrame::kVPlane),
-+                   frame.stride(media::VideoFrame::kVPlane), dst_y, w, dst_u,
-+                   cw, dst_v, cw, w, h);
-+  return true;
++  // Immediately pre-reserve the next free slot so the next PushFrame() can
++  // write directly into shared memory without waiting on Mojo.
++  ReserveBufferOnSequence();
 +}
 +
 +void ExternalVideoSource::OnNewBuffer(
@@ -794,10 +1181,15 @@ index 0000000..7682699
 +  if (buffer_handle->is_unsafe_shmem_region()) {
 +    base::WritableSharedMemoryMapping mapping =
 +        buffer_handle->get_unsafe_shmem_region().Map();
-+    if (mapping.IsValid())
-+      buffers_[buffer_id] = std::move(mapping);
-+    else
++    if (mapping.IsValid()) {
++      base::AutoLock lock(lock_);
++      if (!shut_down_) {
++        buffers_[buffer_id] = base::MakeRefCounted<SharedBufferSlot>(
++            buffer_id, std::move(mapping));
++      }
++    } else {
 +      LOG(ERROR) << "cef_external_video: failed to map buffer " << buffer_id;
++    }
 +  } else {
 +    LOG(ERROR) << "cef_external_video: unexpected buffer handle type";
 +  }
@@ -806,6 +1198,7 @@ index 0000000..7682699
 +
 +void ExternalVideoSource::OnBufferRetired(int32_t buffer_id) {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  base::AutoLock lock(lock_);
 +  buffers_.erase(buffer_id);
 +}
 +
@@ -823,8 +1216,6 @@ index 0000000..7682699
 +    int max_width,
 +    int max_height,
 +    float max_fps) {
-+  // Reject negative values here: gfx::Size would silently clamp them to 0,
-+  // which means "use the default".
 +  if (!device_id || max_width < 0 || max_height < 0 || !(max_fps >= 0.f))
 +    return nullptr;
 +  if (max_width == 0)
@@ -871,10 +1262,10 @@ index 0000000..7682699
 +}
 diff --git a/cef/libcef/browser/external_video_source.h b/cef/libcef/browser/external_video_source.h
 new file mode 100644
-index 0000000..7df3ca8
+index 0000000..bbae3fc
 --- /dev/null
 +++ b/cef/libcef/browser/external_video_source.h
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,156 @@
 +// Copyright (c) 2026. All rights reserved.
 +//
 +// Implementation of include/cef_external_video.h. See that header for the
@@ -884,15 +1275,18 @@ index 0000000..7df3ca8
 +#define CEF_LIBCEF_BROWSER_EXTERNAL_VIDEO_SOURCE_H_
 +#pragma once
 +
++#include <cstdint>
 +#include <map>
 +#include <string>
 +
++#include "base/memory/ref_counted.h"
 +#include "base/memory/ref_counted_delete_on_sequence.h"
 +#include "base/memory/scoped_refptr.h"
 +#include "base/memory/shared_memory_mapping.h"
 +#include "base/synchronization/lock.h"
 +#include "base/task/sequenced_task_runner.h"
 +#include "base/thread_annotations.h"
++#include "base/time/time.h"
 +#include "include/cef_external_video.h"
 +#include "media/base/video_frame.h"
 +#include "media/capture/video/video_capture_device_info.h"
@@ -903,6 +1297,7 @@ index 0000000..7df3ca8
 +#include "services/video_capture/public/mojom/video_source_provider.mojom.h"
 +#include "services/video_capture/public/mojom/virtual_device.mojom.h"
 +#include "ui/gfx/color_space.h"
++#include "ui/gfx/geometry/rect.h"
 +#include "ui/gfx/geometry/size.h"
 +
 +namespace cef_external_video {
@@ -916,10 +1311,17 @@ index 0000000..7df3ca8
 +// One external video source. Registered with the video capture service as a
 +// shared-memory virtual device.
 +//
++// Performance design:
++// - Pre-reserves one shared-memory slot ahead of time so PushFrame() writes
++//   the caller's YUV planes directly into the Mojo shared memory buffer in a
++//   single non-temporal streaming pass (zero per-frame heap allocation, zero
++//   OS VirtualAlloc/VirtualFree page-fault churn).
++// - When all consumer buffers are busy, PushFrame() drops in O(1) at entry
++//   without allocating or copying any pixel data.
++//
 +// Threading:
 +// - Create(), PushFrame() and Shutdown() may be called on any thread.
-+// - All mojo state lives on |task_runner_|, a dedicated sequence, so the
-+//   per-frame copy into shared memory never runs on the browser UI thread.
++// - All mojo state lives on |task_runner_|, a dedicated sequence.
 +// - The object is ref-counted and always deleted on |task_runner_|.
 +class ExternalVideoSource
 +    : public base::RefCountedDeleteOnSequence<ExternalVideoSource>,
@@ -934,8 +1336,8 @@ index 0000000..7df3ca8
 +  ExternalVideoSource(const ExternalVideoSource&) = delete;
 +  ExternalVideoSource& operator=(const ExternalVideoSource&) = delete;
 +
-+  // Copies the frame. |color_space| describes this frame. Returns false if it
-+  // was rejected.
++  // Copies the frame into a pre-reserved shared memory buffer (or cold-start
++  // slot before the first buffer arrives). Returns false if rejected.
 +  bool PushFrame(const uint8_t* y,
 +                 int y_stride,
 +                 const uint8_t* u,
@@ -960,6 +1362,17 @@ index 0000000..7df3ca8
 +  friend class base::RefCountedDeleteOnSequence<ExternalVideoSource>;
 +  friend class base::DeleteHelper<ExternalVideoSource>;
 +
++  struct SharedBufferSlot : public base::RefCountedThreadSafe<SharedBufferSlot> {
++    SharedBufferSlot(int32_t id, base::WritableSharedMemoryMapping map);
++
++    const int32_t buffer_id;
++    base::WritableSharedMemoryMapping mapping;
++
++   private:
++    friend class base::RefCountedThreadSafe<SharedBufferSlot>;
++    ~SharedBufferSlot() = default;
++  };
++
 +  ExternalVideoSource(scoped_refptr<base::SequencedTaskRunner> task_runner,
 +                      const media::VideoCaptureDeviceInfo& device_info,
 +                      float max_fps);
@@ -969,10 +1382,14 @@ index 0000000..7df3ca8
 +  void InitOnSequence(
 +      mojo::PendingRemote<video_capture::mojom::VideoSourceProvider> provider);
 +  void ShutdownOnSequence();
-+  void RequestBufferOnSequence();
-+  void OnBufferReady(scoped_refptr<media::VideoFrame> frame, int32_t buffer_id);
-+  bool CopyToBuffer(const media::VideoFrame& frame,
-+                    base::WritableSharedMemoryMapping& mapping);
++  void ReserveBufferOnSequence();
++  void OnBufferReserved(gfx::Size requested_coded_size, int32_t buffer_id);
++  void SubmitFrameOnSequence(int32_t buffer_id,
++                             gfx::Size coded_size,
++                             gfx::Rect visible_rect,
++                             int64_t timestamp_us,
++                             base::TimeTicks reference_time,
++                             gfx::ColorSpace color_space);
 +  void OnConnectionError();
 +
 +  // Immutable after construction.
@@ -983,17 +1400,23 @@ index 0000000..7df3ca8
 +
 +  // Shared between the pushing thread(s) and |task_runner_|.
 +  base::Lock lock_;
-+  // Newest frame that has not been handed to a buffer request yet.
-+  scoped_refptr<media::VideoFrame> pending_frame_ GUARDED_BY(lock_);
-+  // True while a RequestFrameBuffer() round trip is outstanding or scheduled.
-+  bool request_in_flight_ GUARDED_BY(lock_) = false;
++  std::map<int32_t, scoped_refptr<SharedBufferSlot>> buffers_ GUARDED_BY(lock_);
++  scoped_refptr<SharedBufferSlot> reserved_slot_ GUARDED_BY(lock_);
++  gfx::Size reserved_coded_size_ GUARDED_BY(lock_);
++  gfx::Size desired_coded_size_ GUARDED_BY(lock_);
++  // Used only once before the very first shared-memory buffer is mapped so a
++  // single still frame pushed immediately after creation is never lost.
++  scoped_refptr<media::VideoFrame> cold_start_frame_ GUARDED_BY(lock_);
++  bool has_completed_initial_reserve_ GUARDED_BY(lock_) = false;
++  bool device_ready_ GUARDED_BY(lock_) = false;
++  bool reserve_in_flight_ GUARDED_BY(lock_) = false;
++  int consecutive_empty_reserves_ GUARDED_BY(lock_) = 0;
 +  bool shut_down_ GUARDED_BY(lock_) = false;
 +
 +  // |task_runner_| only.
 +  mojo::Remote<video_capture::mojom::VideoSourceProvider> provider_;
 +  mojo::Remote<video_capture::mojom::SharedMemoryVirtualDevice> device_;
 +  mojo::Receiver<video_capture::mojom::Producer> producer_receiver_{this};
-+  std::map<int32_t, base::WritableSharedMemoryMapping> buffers_;
 +};
 +
 +}  // namespace cef_external_video
