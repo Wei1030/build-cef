@@ -448,8 +448,8 @@ jobs:
     if: always() && inputs.release
     runs-on: ubuntu-latest
     outputs:
-      # Set when the packages were published.
-      release_tag: ${{ steps.tag.outputs.release_tag }}
+      # Set only when the release was created or updated.
+      release_tag: ${{ steps.publish.outputs.release_tag }}
     steps:
       # Each artifact goes to dist/<name>: cef-<platform> with the packages,
       # timeout-<platform> for a build stopped at its time limit.
@@ -459,54 +459,69 @@ jobs:
         with:
           path: dist
 
-      - name: Generate release tag and notes
-        id: tag
-        env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        run: |
-          ls -laR dist 2>/dev/null || true
-          built=$(ls -d dist/cef-* 2>/dev/null | sed 's|^dist/cef-||' || true)
-          stopped=$(ls -d dist/timeout-* 2>/dev/null | sed 's|^dist/timeout-||' || true)
-          if [ -z "$built" ]; then
-            echo "No packages to publish"
-            exit 0
-          fi
-          tag="${RELEASE_TAG:-${CEF_BRANCH}_$(date -u +%Y.%m.%d-%H%M)}"
-          echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "built=$(echo $built)" >> "$GITHUB_OUTPUT"
-          {
-            if [ -z "$RELEASE_TAG" ]; then
-              echo "CEF ${CEF_BRANCH} custom build (${GITHUB_SHA::7})"
-              echo
-            fi
-            for p in $built; do echo "- $p (${GITHUB_SHA::7})"; done
-            for p in $stopped; do echo "- $p: time limit reached, continued in the next run"; done
-          } > release.txt
-          cat release.txt
-
-      - name: Upload to release
-        if: steps.tag.outputs.release_tag != ''
+      - name: Publish
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.release_tag }}
-          BUILT: ${{ steps.tag.outputs.built }}
-          NEW_RELEASE: ${{ inputs.release_tag == '' }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REQUESTED: >-
+            ${{ inputs.windows_x86 && 'windows-x86' || '' }}
+            ${{ inputs.windows_x64 && 'windows-x64' || '' }}
+            ${{ inputs.linux && 'linux-x64' || '' }}
+            ${{ inputs.macos && format('macos-{0}', inputs.macos_arch) || '' }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
+          LINUX_RESULT: ${{ needs.linux.result }}
+          MACOS_RESULT: ${{ needs.macos.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          files=$(ls dist/cef-*/*.zip dist/cef-*/*.tar.bz2 2>/dev/null)
-          if [ "$NEW_RELEASE" = true ]; then
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"               --title "$TAG" --notes-file release.txt $files
-            exit 0
+          shopt -s nullglob
+          ls -laR dist 2>/dev/null || true
+          sha=${GITHUB_SHA::7}
+          # One notes line per platform requested in this run. A job cancelled
+          # at the 6 hour limit counts as stopped, as in the continue job.
+          for p in $REQUESTED; do
+            case $p in
+              windows-*) result=$WINDOWS_RESULT ;;
+              linux-*) result=$LINUX_RESULT ;;
+              *) result=$MACOS_RESULT ;;
+            esac
+            if [ -d "dist/cef-$p" ]; then
+              echo "- $p: built ($sha)"
+            elif [ -d "dist/timeout-$p" ] || [ "$result" = cancelled ]; then
+              echo "- $p: time limit reached, continued in the next run"
+            else
+              echo "- $p: build failed ($RUN_URL)"
+            fi
+          done > lines.txt
+          cat lines.txt
+          files=(dist/cef-*/*.zip dist/cef-*/*.tar.bz2)
+          if [ -z "$RELEASE_TAG" ]; then
+            if [ ${#files[@]} -eq 0 ]; then
+              echo "No packages to publish"
+              exit 0
+            fi
+            tag="${CEF_BRANCH}_$(date -u +%Y.%m.%d-%H%M)"
+            { echo "CEF ${CEF_BRANCH} custom build ($sha)"; echo; cat lines.txt; } > notes.txt
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "$tag" --notes-file notes.txt "${files[@]}"
+          else
+            # An existing release only gets the files and notes: moving it to
+            # another commit is refused to the workflow token when the commits
+            # differ in workflow files. The notes are updated even without
+            # packages, so a continued build that then failed does not stay
+            # "continued".
+            tag=$RELEASE_TAG
+            body=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+            if [ ${#files[@]} -gt 0 ]; then
+              gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber "${files[@]}"
+            fi
+            # Replace the lines of the platforms requested in this run.
+            pattern="^- ($(echo $REQUESTED | tr ' ' '|'))[: ]"
+            { printf '%s\n' "$body" | grep -vE "$pattern" || true; cat lines.txt; } > notes.txt
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes-file notes.txt > /dev/null
           fi
-          # An existing release only gets the files and notes: moving it to
-          # another commit is refused to the workflow token when the commits
-          # differ in workflow files.
-          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber $files
-          # Append the notes, dropping the time limit lines of the platforms
-          # built now.
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body             | grep -vE "^- ($(echo $BUILT | tr ' ' '|')): time limit reached" > notes.txt || true
-          cat release.txt >> notes.txt
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.txt > /dev/null
           cat notes.txt
+          echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
 
   # Starts a new run for the builds that stopped at their time limit; with
   # sccache it continues from the objects this run compiled.
