@@ -1,0 +1,262 @@
+ .../public/platform/web_media_player_client.h      |  4 +
+ .../renderer/core/html/media/html_media_element.cc |  2 +-
+ .../renderer/core/html/media/html_media_element.h  |  1 +
+ .../modules/mediastream/webmediaplayer_ms.cc       |  4 +-
+ .../mediastream/webmediaplayer_ms_compositor.cc    | 90 +++++++++++++++++-----
+ .../mediastream/webmediaplayer_ms_compositor.h     |  4 +-
+ 6 files changed, 83 insertions(+), 22 deletions(-)
+
+diff --git a/third_party/blink/public/platform/web_media_player_client.h b/third_party/blink/public/platform/web_media_player_client.h
+index f49537eb77..31007f791a 100644
+--- a/third_party/blink/public/platform/web_media_player_client.h
++++ b/third_party/blink/public/platform/web_media_player_client.h
+@@ -145,6 +145,10 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerClient {
+   // Returns the current display type of the media element.
+   virtual DisplayType GetDisplayType() const = 0;
+ 
++  // Returns whether the associated media element is connected to an active
++  // Document.
++  virtual bool IsElementInActiveDocument() const { return true; }
++
+   // Returns the remote playback client associated with the media element, if
+   // any.
+   virtual WebRemotePlaybackClient* RemotePlaybackClient() { return nullptr; }
+diff --git a/third_party/blink/renderer/core/html/media/html_media_element.cc b/third_party/blink/renderer/core/html/media/html_media_element.cc
+index 1b74c9ec37..149a85aa5c 100644
+--- a/third_party/blink/renderer/core/html/media/html_media_element.cc
++++ b/third_party/blink/renderer/core/html/media/html_media_element.cc
+@@ -4018,7 +4018,7 @@ bool HTMLMediaElement::HasPendingActivityInternal() const {
+   //
+   // We use the WebMediaPlayer's network state instead of |network_state_| since
+   // it's value is unreliable prior to ready state kHaveMetadata.
+-  if (!media_source_attachment_) {
++  if (!media_source_attachment_ && !src_object_stream_descriptor_) {
+     if (!web_media_player_) {
+       if (network_state_ == kNetworkLoading)
+         return true;
+diff --git a/third_party/blink/renderer/core/html/media/html_media_element.h b/third_party/blink/renderer/core/html/media/html_media_element.h
+index 2121470baa..a622e3b487 100644
+--- a/third_party/blink/renderer/core/html/media/html_media_element.h
++++ b/third_party/blink/renderer/core/html/media/html_media_element.h
+@@ -554,6 +554,7 @@ class CORE_EXPORT HTMLMediaElement
+   bool HasNativeControls() final;
+   bool IsAudioElement() final;
+   DisplayType GetDisplayType() const override;
++  bool IsElementInActiveDocument() const override { return InActiveDocument(); }
+   WebRemotePlaybackClient* RemotePlaybackClient() final {
+     return remote_playback_client_;
+   }
+diff --git a/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms.cc b/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms.cc
+index 34f4ec97f3..49f7d9c65e 100644
+--- a/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms.cc
++++ b/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms.cc
+@@ -830,7 +830,9 @@ void WebMediaPlayerMS::Pause() {
+     video_frame_provider_->Pause();
+ 
+   compositor_->StopRendering();
+-  compositor_->ReplaceCurrentFrameWithACopy();
++  const bool force_black_frame =
++      client_ && !client_->IsElementInActiveDocument();
++  compositor_->ReplaceCurrentFrameWithACopy(force_black_frame);
+ 
+   if (audio_renderer_)
+     audio_renderer_->Pause();
+diff --git a/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms_compositor.cc b/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms_compositor.cc
+index be2545ad16..415e9b2866 100644
+--- a/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms_compositor.cc
++++ b/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms_compositor.cc
+@@ -54,6 +54,41 @@ namespace blink {
+ 
+ namespace {
+ 
++// Returns a 16x16 I420 black VideoFrame backed by process-static planes (zero
++// pixel-buffer heap allocation) while preserving |source_frame|'s natural_size
++// and timestamp so videoWidth/videoHeight remain stable and hardware capture
++// buffers are immediately released.
++scoped_refptr<media::VideoFrame> CreateMinimalBlackFrame(
++    const media::VideoFrame& source_frame) {
++  static constexpr int kBlackDim = 16;
++  alignas(64) static uint8_t kBlackY[kBlackDim * kBlackDim] = {0};
++  alignas(64) static uint8_t kBlackUV[(kBlackDim / 2) * (kBlackDim / 2)] = {
++      0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
++      0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
++      0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
++      0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
++      0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
++      0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80};
++
++  const gfx::Size coded_size(kBlackDim, kBlackDim);
++  const gfx::Rect visible_rect(coded_size);
++  const gfx::Size natural_size = source_frame.natural_size().IsEmpty()
++                                     ? coded_size
++                                     : source_frame.natural_size();
++  scoped_refptr<media::VideoFrame> black_frame =
++      media::VideoFrame::WrapExternalYuvData(
++          media::PIXEL_FORMAT_I420, coded_size, visible_rect, natural_size,
++          /*y_stride=*/kBlackDim, /*u_stride=*/kBlackDim / 2,
++          /*v_stride=*/kBlackDim / 2, kBlackY, kBlackUV, kBlackUV,
++          source_frame.timestamp());
++  if (black_frame) {
++    black_frame->metadata().MergeMetadataFrom(source_frame.metadata());
++    black_frame->metadata().texture_owner = false;
++    black_frame->metadata().read_lock_fences_enabled = false;
++  }
++  return black_frame;
++}
++
+ // This function copies |frame| to a new I420 or YV12A media::VideoFrame.
+ scoped_refptr<media::VideoFrame> CopyFrame(
+     scoped_refptr<media::VideoFrame> frame,
+@@ -69,13 +104,15 @@ scoped_refptr<media::VideoFrame> CopyFrame(
+     auto provider = Platform::Current()->SharedMainThreadContextProvider();
+     if (!provider) {
+       // Return a black frame (yuv = {0, 0x80, 0x80}).
+-      return media::VideoFrame::CreateColorFrame(
+-          frame->visible_rect().size(), 0u, 0x80, 0x80, frame->timestamp());
++      return CreateMinimalBlackFrame(*frame);
+     }
+ 
+     SkBitmap bitmap;
+-    bitmap.allocPixels(SkImageInfo::MakeN32Premul(
+-        frame->visible_rect().width(), frame->visible_rect().height()));
++    const SkImageInfo bitmap_info = SkImageInfo::MakeN32Premul(
++        frame->visible_rect().width(), frame->visible_rect().height());
++    if (!bitmap.tryAllocPixels(bitmap_info)) {
++      return CreateMinimalBlackFrame(*frame);
++    }
+     cc::SkiaPaintCanvas paint_canvas(bitmap);
+ 
+     DCHECK(provider->RasterInterface());
+@@ -86,8 +123,7 @@ scoped_refptr<media::VideoFrame> CopyFrame(
+         media::CreateFromSkImage(bitmap.asImage(), frame->visible_rect(),
+                                  frame->natural_size(), frame->timestamp());
+     if (!new_frame) {
+-      return media::VideoFrame::CreateColorFrame(
+-          frame->visible_rect().size(), 0u, 0x80, 0x80, frame->timestamp());
++      return CreateMinimalBlackFrame(*frame);
+     }
+   } else {
+     DCHECK(frame->IsMappable());
+@@ -96,8 +132,7 @@ scoped_refptr<media::VideoFrame> CopyFrame(
+         frame->format() != media::PIXEL_FORMAT_NV12 &&
+         frame->format() != media::PIXEL_FORMAT_ARGB) {
+       DLOG(WARNING) << frame->format() << " is not supported.";
+-      return media::VideoFrame::CreateColorFrame(
+-          frame->visible_rect().size(), 0u, 0x80, 0x80, frame->timestamp());
++      return CreateMinimalBlackFrame(*frame);
+     }
+ 
+     const gfx::Size& coded_size = frame->coded_size();
+@@ -105,8 +140,7 @@ scoped_refptr<media::VideoFrame> CopyFrame(
+         frame->format(), coded_size, frame->visible_rect(),
+         frame->natural_size(), frame->timestamp());
+     if (!new_frame) {
+-      return media::VideoFrame::CreateColorFrame(
+-          frame->visible_rect().size(), 0u, 0x80, 0x80, frame->timestamp());
++      return CreateMinimalBlackFrame(*frame);
+     }
+ 
+     if (frame->format() == media::PIXEL_FORMAT_NV12) {
+@@ -272,7 +306,8 @@ void WebMediaPlayerMSCompositor::SetIsSurfaceVisible(
+     bool state,
+     base::WaitableEvent* done_event) {
+   DCHECK(video_frame_compositor_task_runner_->BelongsToCurrentThread());
+-  submitter_->SetIsSurfaceVisible(state);
++  if (submitter_)
++    submitter_->SetIsSurfaceVisible(state);
+   if (done_event)
+     done_event->Signal();
+ }
+@@ -597,8 +632,10 @@ void WebMediaPlayerMSCompositor::OnContextLost() {
+     return;
+   }
+   scoped_refptr<media::VideoFrame> black_frame =
+-      media::VideoFrame::CreateBlackFrame(current_frame_->natural_size());
+-  SetCurrentFrame(std::move(black_frame), false, absl::nullopt);
++      CreateMinimalBlackFrame(*current_frame_);
++  if (black_frame) {
++    SetCurrentFrame(std::move(black_frame), false, absl::nullopt);
++  }
+ }
+ 
+ void WebMediaPlayerMSCompositor::StartRendering() {
+@@ -621,15 +658,26 @@ void WebMediaPlayerMSCompositor::StopRendering() {
+                           WrapRefCounted(this)));
+ }
+ 
+-void WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopy() {
++void WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopy(
++    bool force_black_frame) {
+   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
++  if (force_black_frame) {
++    // Evict any Viz compositor resource held by |submitter_| once detached from
++    // the Document so hardware capture slots return immediately.
++    PostCrossThreadTask(
++        *video_frame_compositor_task_runner_, FROM_HERE,
++        CrossThreadBindOnce(
++            &WebMediaPlayerMSCompositor::SetIsSurfaceVisible,
++            WrapRefCounted(this), false,
++            CrossThreadUnretained(static_cast<base::WaitableEvent*>(nullptr))));
++  }
+   // Bounce this call off of IO thread to since there might still be frames
+   // passed on IO thread.
+   io_task_runner_->PostTask(
+       FROM_HERE,
+       media::BindToCurrentLoop(WTF::BindOnce(
+           &WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopyInternal,
+-          WrapRefCounted(this))));
++          WrapRefCounted(this), force_black_frame)));
+ }
+ 
+ void WebMediaPlayerMSCompositor::StopUsingProvider() {
+@@ -881,7 +929,8 @@ void WebMediaPlayerMSCompositor::StopUsingProviderInternal() {
+   video_frame_provider_client_ = nullptr;
+ }
+ 
+-void WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopyInternal() {
++void WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopyInternal(
++    bool force_black_frame) {
+   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+   scoped_refptr<media::VideoFrame> current_frame_ref;
+   {
+@@ -894,11 +943,16 @@ void WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopyInternal() {
+   // The original frame must not be referenced when the player is paused since
+   // there might be a finite number of available buffers. E.g, video that
+   // originates from a video camera, HW decoded frames.
++  // When paused due to DOM removal (!InActiveDocument()), substitute a static
++  // minimal black frame directly to avoid GPU-to-CPU readback and large heap
++  // allocations while still releasing the original capture buffer.
+   scoped_refptr<media::VideoFrame> copied_frame =
+-      CopyFrame(current_frame_ref, player_->GetPaintCanvasVideoRenderer());
++      force_black_frame
++          ? CreateMinimalBlackFrame(*current_frame_ref)
++          : CopyFrame(current_frame_ref, player_->GetPaintCanvasVideoRenderer());
+   // Copying frame can take time, so only set the copied frame if
+   // |current_frame_| hasn't been changed.
+-  {
++  if (copied_frame) {
+     base::AutoLock auto_lock(current_frame_lock_);
+     if (current_frame_ == current_frame_ref) {
+       current_frame_ = std::move(copied_frame);
+diff --git a/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms_compositor.h b/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms_compositor.h
+index 8cb096871b..1cdf7ca179 100644
+--- a/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms_compositor.h
++++ b/third_party/blink/renderer/modules/mediastream/webmediaplayer_ms_compositor.h
+@@ -118,7 +118,7 @@ class MODULES_EXPORT WebMediaPlayerMSCompositor
+ 
+   void StartRendering();
+   void StopRendering();
+-  void ReplaceCurrentFrameWithACopy();
++  void ReplaceCurrentFrameWithACopy(bool force_black_frame = false);
+ 
+   // Tell |video_frame_provider_client_| to stop using this instance in
+   // preparation for dtor.
+@@ -210,7 +210,7 @@ class MODULES_EXPORT WebMediaPlayerMSCompositor
+   void StartRenderingInternal();
+   void StopRenderingInternal();
+   void StopUsingProviderInternal();
+-  void ReplaceCurrentFrameWithACopyInternal();
++  void ReplaceCurrentFrameWithACopyInternal(bool force_black_frame);
+ 
+   void SetAlgorithmEnabledForTesting(bool algorithm_enabled);
+   void RecordFrameDisplayedStats(base::TimeTicks frame_displayed_time);

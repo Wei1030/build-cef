@@ -11,7 +11,8 @@ git -C "$SRC/third_party/ffmpeg" apply "$SCRIPT_PATH/add-hevc-ffmpeg-decoder-par
 for patch in fix-webui_module_path.patch \
              remove-main-main10-profile-limit.patch \
              vs2026-toolchain.patch \
-             add-external-video-source.patch; do
+             add-external-video-source.patch \
+             fix-mediastream-pause-frame-oom.patch; do
   git -C "$SRC" apply "$SCRIPT_PATH/$patch"
 done
 
