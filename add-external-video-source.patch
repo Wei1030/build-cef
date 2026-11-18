@@ -422,10 +422,10 @@ index 0000000..f914f3c
 +#endif  // CEF_INCLUDE_CEF_EXTERNAL_VIDEO_H_
 diff --git a/cef/libcef/browser/external_video_source.cc b/cef/libcef/browser/external_video_source.cc
 new file mode 100644
-index 0000000..9f3bdf7
+index 0000000..8dcab58
 --- /dev/null
 +++ b/cef/libcef/browser/external_video_source.cc
-@@ -0,0 +1,2610 @@
+@@ -0,0 +1,2911 @@
 +// Copyright (c) 2026. All rights reserved.
 +
 +#include "libcef/browser/external_video_source.h"
@@ -491,9 +491,14 @@ index 0000000..9f3bdf7
 +#endif
 +
 +#if defined(ARCH_CPU_X86_FAMILY) && !BUILDFLAG(IS_NACL)
-+#include <avx2intrin.h>
-+#include <avxintrin.h>
 +#include <immintrin.h>
++#if defined(_MSC_VER)
++// Under clang-cl (_MSC_VER) without /arch:AVX2, <immintrin.h> omits AVX/AVX2
++// headers, whereas on Linux/macOS <immintrin.h> includes them automatically and
++// forbids direct inclusion before <immintrin.h>.
++#include <avxintrin.h>
++#include <avx2intrin.h>
++#endif
 +#elif defined(ARCH_CPU_ARM64)
 +#include <arm_neon.h>
 +#endif
@@ -503,20 +508,11 @@ index 0000000..9f3bdf7
 +namespace {
 +
 +constexpr size_t kTexturePoolSlots = 3;
++constexpr size_t kTargetReservedShmemSlots = 2;
 +constexpr int kMaxEmptyReserveRetries = 6;
 +constexpr base::TimeDelta kEmptyReserveRetryDelay = base::Milliseconds(2);
-+
-+std::atomic<bool> g_logged_shmem_fallback{false};
-+
-+void LogSharedMemoryFallbackOnce(const char* reason) {
-+  bool expected = false;
-+  if (g_logged_shmem_fallback.compare_exchange_strong(
-+          expected, true, std::memory_order_relaxed)) {
-+    LOG(WARNING) << "cef_external_video: GPU texture backend unavailable ("
-+                 << (reason ? reason : "unspecified")
-+                 << "); using pre-reserved shared memory fallback";
-+  }
-+}
++constexpr base::TimeDelta kStaleTextureSlotTimeout = base::Milliseconds(1200);
++constexpr int kMaxHardwareTextureDimension = 16384;
 +
 +#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 +std::atomic<bool> g_logged_texture_active{false};
@@ -1098,6 +1094,12 @@ index 0000000..9f3bdf7
 +    : public base::RefCountedThreadSafe<
 +          ExternalVideoSource::SharedD3D12CopyUploader> {
 + public:
++  enum class UploadStatus {
++    kSubmitted,
++    kTransientDrop,
++    kFatalError,
++  };
++
 +  using CompletionCallback = base::OnceCallback<void(bool success)>;
 +
 +  static scoped_refptr<SharedD3D12CopyUploader> GetOrCreate(
@@ -1193,7 +1195,7 @@ index 0000000..9f3bdf7
 +    return true;
 +  }
 +
-+  bool SubmitAsyncUploadNV12(
++  UploadStatus SubmitAsyncUploadNV12(
 +      Microsoft::WRL::ComPtr<ID3D12Resource> dst_d3d12_res,
 +      const D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprints[2],
 +      UINT64 total_upload_bytes,
@@ -1208,18 +1210,20 @@ index 0000000..9f3bdf7
 +      int height,
 +      CompletionCallback on_complete) {
 +    if (!dst_d3d12_res || !IsDeviceHealthy()) {
-+      return false;
++      return UploadStatus::kFatalError;
 +    }
 +
 +    size_t upload_idx = 0;
-+    if (!AcquireUploadSlotIndex(&upload_idx)) {
-+      return false;
++    if (!TryAcquireUploadSlotIndex(&upload_idx)) {
++      return IsDeviceHealthy() ? UploadStatus::kTransientDrop
++                               : UploadStatus::kFatalError;
 +    }
 +    UploadBufferSlot& up = upload_slots_[upload_idx];
 +
 +    if (!EnsureUploadSlotCapacity(&up, total_upload_bytes)) {
 +      ReturnUploadSlotIndex(upload_idx);
-+      return false;
++      return IsDeviceHealthy() ? UploadStatus::kTransientDrop
++                               : UploadStatus::kFatalError;
 +    }
 +
 +    // Stream I420/YV12 -> NV12 directly into the persistently mapped D3D12
@@ -1236,7 +1240,7 @@ index 0000000..9f3bdf7
 +    if (FAILED(up.cmd_allocator->Reset()) ||
 +        FAILED(up.cmd_list->Reset(up.cmd_allocator.Get(), nullptr))) {
 +      ReturnUploadSlotIndex(upload_idx);
-+      return false;
++      return UploadStatus::kFatalError;
 +    }
 +
 +    for (UINT plane = 0; plane < 2; ++plane) {
@@ -1255,34 +1259,34 @@ index 0000000..9f3bdf7
 +
 +    if (FAILED(up.cmd_list->Close())) {
 +      ReturnUploadSlotIndex(upload_idx);
-+      return false;
++      return UploadStatus::kFatalError;
 +    }
 +
 +    {
 +      base::AutoLock lock(queue_lock_);
 +      if (device_failed_.load(std::memory_order_acquire)) {
-+        return false;
++        return UploadStatus::kFatalError;
 +      }
 +      ID3D12CommandList* cmd_lists[] = {up.cmd_list.Get()};
 +      copy_queue_->ExecuteCommandLists(1, cmd_lists);
 +      const uint64_t fv = ++next_fence_value_;
 +      if (FAILED(copy_queue_->Signal(fence_.Get(), fv))) {
 +        MarkDeviceFailed();
-+        return false;
++        return UploadStatus::kFatalError;
 +      }
 +      pending_copies_.push_back(
 +          {fv, upload_idx, std::move(dst_d3d12_res), std::move(on_complete)});
 +      queue_cv_.Signal();
 +    }
-+    return true;
++    return UploadStatus::kSubmitted;
 +  }
 +
 + private:
 +  friend class base::RefCountedThreadSafe<SharedD3D12CopyUploader>;
 +
-+  // Bounded ring of persistently mapped D3D12 UPLOAD buffers (~98 MiB total for
-+  // 4K NV12 on 32-bit x86; ~196 MiB on 64-bit).
-+  static constexpr size_t kMaxUploadSlots = (sizeof(void*) == 4) ? 8u : 16u;
++  // Bounded ring of lazily allocated D3D12 UPLOAD buffers (never blocks caller
++  // threads; excess concurrent bursts drop cleanly in O(1)).
++  static constexpr size_t kMaxUploadSlots = (sizeof(void*) == 4) ? 12u : 32u;
 +
 +  struct UploadBufferSlot {
 +    UINT64 capacity_bytes = 0;
@@ -1311,26 +1315,34 @@ index 0000000..9f3bdf7
 +        copy_queue_(std::move(copy_queue)),
 +        fence_(std::move(fence)),
 +        fence_event_(std::move(fence_event)),
-+        pool_cv_(&pool_lock_),
 +        queue_cv_(&queue_lock_) {
 +    for (size_t i = 0; i < kMaxUploadSlots; ++i) {
 +      free_upload_indices_.push_back(i);
 +    }
 +  }
 +
-+  ~SharedD3D12CopyUploader() = default;
++  ~SharedD3D12CopyUploader() {
++    for (auto& slot : upload_slots_) {
++      if (slot.upload_buffer && slot.cpu_ptr) {
++        slot.upload_buffer->Unmap(0, nullptr);
++        slot.cpu_ptr = nullptr;
++      }
++    }
++  }
 +
 +  void StartWaiterThread() {
-+    // Keep one intentional process-lifetime reference for the detached DMA
-+    // fence waiter thread so OS exit never races destructor teardown.
++    // Hold one self-reference while the detached DMA waiter thread is alive.
++    // On normal process exit it stays parked without racing CRT destructors;
++    // on GPU device removal it drains |pending_copies_|, releases COM state,
++    // and calls Release() so defunct uploaders do not leak threads or devices.
 +    AddRef();
 +    std::thread(&SharedD3D12CopyUploader::WaiterThreadMain, this).detach();
 +  }
 +
 +  void MarkDeviceFailed() {
 +    device_failed_.store(true, std::memory_order_release);
-+    base::AutoLock lock(pool_lock_);
-+    pool_cv_.Broadcast();
++    base::AutoLock lock(queue_lock_);
++    queue_cv_.Broadcast();
 +  }
 +
 +  void WaiterThreadMain() {
@@ -1338,8 +1350,13 @@ index 0000000..9f3bdf7
 +      PendingCopy item;
 +      {
 +        base::AutoLock lock(queue_lock_);
-+        while (pending_copies_.empty()) {
++        while (pending_copies_.empty() &&
++               !device_failed_.load(std::memory_order_acquire)) {
 +          queue_cv_.Wait();
++        }
++        if (pending_copies_.empty() &&
++            device_failed_.load(std::memory_order_acquire)) {
++          break;
 +        }
 +        item = std::move(pending_copies_.front());
 +        pending_copies_.pop_front();
@@ -1377,14 +1394,28 @@ index 0000000..9f3bdf7
 +        std::move(item.on_complete).Run(completed);
 +      }
 +    }
++
++    // Device failed and all pending callbacks were drained: release GPU objects
++    // and drop the waiter thread's self-reference.
++    for (auto& slot : upload_slots_) {
++      if (slot.upload_buffer && slot.cpu_ptr) {
++        slot.upload_buffer->Unmap(0, nullptr);
++        slot.cpu_ptr = nullptr;
++      }
++      slot.upload_buffer.Reset();
++      slot.cmd_list.Reset();
++      slot.cmd_allocator.Reset();
++      slot.capacity_bytes = 0;
++    }
++    fence_.Reset();
++    copy_queue_.Reset();
++    d3d12_device_.Reset();
++    d3d11_device_.Reset();
++    Release();
 +  }
 +
-+  bool AcquireUploadSlotIndex(size_t* out_idx) {
++  bool TryAcquireUploadSlotIndex(size_t* out_idx) {
 +    base::AutoLock lock(pool_lock_);
-+    while (free_upload_indices_.empty() &&
-+           !device_failed_.load(std::memory_order_acquire)) {
-+      pool_cv_.Wait();
-+    }
 +    if (device_failed_.load(std::memory_order_acquire) ||
 +        free_upload_indices_.empty()) {
 +      return false;
@@ -1397,7 +1428,6 @@ index 0000000..9f3bdf7
 +  void ReturnUploadSlotIndex(size_t idx) {
 +    base::AutoLock lock(pool_lock_);
 +    free_upload_indices_.push_back(idx);
-+    pool_cv_.Signal();
 +  }
 +
 +  bool EnsureUploadSlotCapacity(UploadBufferSlot* slot, UINT64 needed_bytes) {
@@ -1622,7 +1652,6 @@ index 0000000..9f3bdf7
 +  std::atomic<bool> device_failed_{false};
 +  UploadBufferSlot upload_slots_[kMaxUploadSlots];
 +  base::Lock pool_lock_;
-+  base::ConditionVariable pool_cv_;
 +  std::deque<size_t> free_upload_indices_ GUARDED_BY(pool_lock_);
 +
 +  base::Lock queue_lock_;
@@ -1666,6 +1695,11 @@ index 0000000..9f3bdf7
 +  const bool allow_overlay;
 +  gpu::Mailbox mailbox_y;
 +  gpu::Mailbox mailbox_uv;
++
++  // Guarded by ExternalVideoSource::lock_ while the slot is tracked in the pool.
++  uint64_t submit_seq = 0;
++  base::TimeTicks in_flight_since;
++  bool dma_in_progress = false;
 +
 +#if BUILDFLAG(IS_WIN)
 +  scoped_refptr<SharedD3D12CopyUploader> uploader;
@@ -1861,16 +1895,25 @@ index 0000000..9f3bdf7
 +  }
 +
 +  const gfx::Size coded_size((width + 1) & ~1, (height + 1) & ~1);
++  const base::TimeTicks now_ticks = base::TimeTicks::Now();
 +  scoped_refptr<TextureSlot> tex_slot;
 +  scoped_refptr<SharedBufferSlot> shmem_slot;
 +  gfx::Size shmem_slot_coded_size;
 +  bool need_cold_start_copy = false;
 +  bool post_texture_alloc = false;
++  bool post_reclaim_stale = false;
++  bool drop_after_lock = false;
 +  bool post_shmem_reserve = false;
 +
 +  {
 +    base::AutoLock lock(lock_);
 +    if (shut_down_) {
++      return false;
++    }
++
++    if (mode_ == BackendMode::kTexture &&
++        (coded_size.width() > kMaxHardwareTextureDimension ||
++         coded_size.height() > kMaxHardwareTextureDimension)) {
 +      return false;
 +    }
 +
@@ -1888,14 +1931,22 @@ index 0000000..9f3bdf7
 +
 +      case BackendMode::kTexture: {
 +        if (texture_pool_coded_size_ == coded_size) {
++          if (device_ready_ && !texture_alloc_in_flight_ &&
++              !reclaim_in_flight_ && HasStaleInFlightSlotLocked(now_ticks)) {
++            reclaim_in_flight_ = true;
++            post_reclaim_stale = true;
++          }
 +          if (!free_texture_slots_.empty()) {
 +            tex_slot = std::move(free_texture_slots_.front());
 +            free_texture_slots_.pop_front();
++            tex_slot->submit_seq = ++next_submit_seq_;
++            tex_slot->in_flight_since = now_ticks;
++            tex_slot->dma_in_progress = true;
 +            in_flight_texture_slots_[tex_slot->buffer_id] = tex_slot;
 +          } else {
 +            // All 3 GPU texture slots are currently in flight: drop in O(1) at
 +            // entry without touching CPU or PCIe bandwidth.
-+            return true;
++            drop_after_lock = true;
 +          }
 +        } else {
 +          if (!has_completed_initial_setup_ &&
@@ -1915,10 +1966,10 @@ index 0000000..9f3bdf7
 +      }
 +
 +      case BackendMode::kSharedMemory: {
-+        if (reserved_slot_) {
-+          shmem_slot = std::move(reserved_slot_);
-+          shmem_slot_coded_size = reserved_coded_size_;
-+          reserve_in_flight_ = true;
++        if (!reserved_slots_.empty()) {
++          shmem_slot = std::move(reserved_slots_.front().first);
++          shmem_slot_coded_size = reserved_slots_.front().second;
++          reserved_slots_.pop_front();
 +          consecutive_empty_reserves_ = 0;
 +        } else if (!has_completed_initial_setup_) {
 +          if (!cold_start_frame_ ||
@@ -1944,9 +1995,18 @@ index 0000000..9f3bdf7
 +    }
 +  }
 +
++  if (post_reclaim_stale) {
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ExternalVideoSource::ReclaimStaleTextureSlotsOnSequence,
++                       base::WrapRefCounted(this)));
++  }
++  if (drop_after_lock) {
++    return true;
++  }
++
 +  if (tex_slot) {
 +#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-+    const base::TimeTicks ref_time = base::TimeTicks::Now();
 +    const gfx::Rect visible_rect(width, height);
 +#endif
 +#if BUILDFLAG(IS_WIN)
@@ -1968,22 +2028,29 @@ index 0000000..9f3bdf7
 +                FROM_HERE,
 +                base::BindOnce(
 +                    &ExternalVideoSource::HandleTextureUploadFailureOnSequence,
-+                    src, id));
++                    src, id, "D3D12 copy queue fence failed"));
 +          }
 +        },
-+        self, buf_id, slot_size, visible_rect, timestamp_us, ref_time,
++        self, buf_id, slot_size, visible_rect, timestamp_us, now_ticks,
 +        color_space);
 +
-+    if (!tex_slot->uploader ||
-+        !tex_slot->uploader->SubmitAsyncUploadNV12(
-+            tex_slot->d3d12_resource, tex_slot->footprints,
-+            tex_slot->upload_total_bytes, slot_size, y, y_stride, u, u_stride,
-+            v, v_stride, width, height, std::move(on_dma_done))) {
++    const auto status =
++        tex_slot->uploader
++            ? tex_slot->uploader->SubmitAsyncUploadNV12(
++                  tex_slot->d3d12_resource, tex_slot->footprints,
++                  tex_slot->upload_total_bytes, slot_size, y, y_stride, u,
++                  u_stride, v, v_stride, width, height, std::move(on_dma_done))
++            : SharedD3D12CopyUploader::UploadStatus::kFatalError;
++
++    if (status == SharedD3D12CopyUploader::UploadStatus::kTransientDrop) {
++      ReturnTransientDroppedSlot(buf_id);
++    } else if (status == SharedD3D12CopyUploader::UploadStatus::kFatalError) {
 +      task_runner_->PostTask(
 +          FROM_HERE,
 +          base::BindOnce(
 +              &ExternalVideoSource::HandleTextureUploadFailureOnSequence,
-+              base::WrapRefCounted(this), buf_id));
++              base::WrapRefCounted(this), buf_id,
++              "D3D12 async NV12 upload device failure"));
 +    }
 +    return true;
 +#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -2005,7 +2072,8 @@ index 0000000..9f3bdf7
 +          FROM_HERE,
 +          base::BindOnce(
 +              &ExternalVideoSource::HandleTextureUploadFailureOnSequence,
-+              base::WrapRefCounted(this), tex_slot->buffer_id));
++              base::WrapRefCounted(this), tex_slot->buffer_id,
++              "Linux NativePixmap DMA-BUF Map failed"));
 +      return true;
 +    }
 +    task_runner_->PostTask(
@@ -2013,7 +2081,7 @@ index 0000000..9f3bdf7
 +        base::BindOnce(&ExternalVideoSource::SubmitTextureFrameOnSequence,
 +                       base::WrapRefCounted(this), tex_slot->buffer_id,
 +                       tex_slot->coded_size, visible_rect, timestamp_us,
-+                       ref_time, color_space));
++                       now_ticks, color_space));
 +    return true;
 +#else
 +    return false;
@@ -2021,17 +2089,22 @@ index 0000000..9f3bdf7
 +  }
 +
 +  if (shmem_slot) {
++    if (!shmem_slot->mapping.IsValid()) {
++      return false;
++    }
 +    const size_t needed =
 +        media::VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420, coded_size);
 +    gfx::Size submit_coded = coded_size;
 +    gfx::Rect submit_visible(width, height);
 +
-+    if (shmem_slot->mapping.IsValid() && shmem_slot->mapping.size() >= needed) {
++    if (shmem_slot->mapping.size() >= needed) {
 +      StreamCopyI420ToMapping(
 +          y, y_stride, u, u_stride, v, v_stride, width, height, coded_size,
 +          static_cast<uint8_t*>(shmem_slot->mapping.memory()));
-+    } else if (shmem_slot->mapping.IsValid() &&
-+               !shmem_slot_coded_size.IsEmpty()) {
++    } else if (!shmem_slot_coded_size.IsEmpty() &&
++               shmem_slot->mapping.size() >=
++                   media::VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420,
++                                                     shmem_slot_coded_size)) {
 +      const int dw = shmem_slot_coded_size.width();
 +      const int dh = shmem_slot_coded_size.height();
 +      const int dcw = dw / 2;
@@ -2044,14 +2117,16 @@ index 0000000..9f3bdf7
 +                        libyuv::kFilterBilinear);
 +      submit_coded = shmem_slot_coded_size;
 +      submit_visible = gfx::Rect(dw, dh);
++    } else {
++      return false;
 +    }
 +
 +    task_runner_->PostTask(
 +        FROM_HERE,
 +        base::BindOnce(&ExternalVideoSource::SubmitShmemFrameOnSequence,
 +                       base::WrapRefCounted(this), shmem_slot->buffer_id,
-+                       submit_coded, submit_visible, timestamp_us,
-+                       base::TimeTicks::Now(), color_space));
++                       submit_coded, submit_visible, timestamp_us, now_ticks,
++                       color_space));
 +    return true;
 +  }
 +
@@ -2067,7 +2142,7 @@ index 0000000..9f3bdf7
 +                       frame->stride(media::VideoFrame::kUPlane),
 +                       frame->writable_data(media::VideoFrame::kVPlane),
 +                       frame->stride(media::VideoFrame::kVPlane), width, height);
-+      frame->metadata().reference_time = base::TimeTicks::Now();
++      frame->metadata().reference_time = now_ticks;
 +      frame->set_color_space(color_space);
 +
 +      base::AutoLock lock(lock_);
@@ -2083,7 +2158,7 @@ index 0000000..9f3bdf7
 +          texture_alloc_in_flight_ = true;
 +          post_texture_alloc = true;
 +        } else if (mode_ == BackendMode::kSharedMemory && !reserve_in_flight_ &&
-+                   !reserved_slot_) {
++                   reserved_slots_.size() < kTargetReservedShmemSlots) {
 +          reserve_in_flight_ = true;
 +          post_shmem_reserve = true;
 +        }
@@ -2112,7 +2187,7 @@ index 0000000..9f3bdf7
 +    shut_down_ = true;
 +    device_ready_ = false;
 +    cold_start_frame_ = nullptr;
-+    reserved_slot_ = nullptr;
++    reserved_slots_.clear();
 +    shmem_buffers_.clear();
 +    free_texture_slots_.clear();
 +  }
@@ -2233,8 +2308,15 @@ index 0000000..9f3bdf7
 +    return;
 +  }
 +
-+  LogSharedMemoryFallbackOnce(fallback_reason);
++  if (!logged_shmem_fallback_) {
++    logged_shmem_fallback_ = true;
++    LOG(WARNING) << "cef_external_video[" << device_info_.descriptor.device_id
++                 << "]: GPU texture backend unavailable ("
++                 << (fallback_reason ? fallback_reason : "unspecified")
++                 << "); using pre-reserved shared memory fallback";
++  }
 +
++  shmem_ipc_in_flight_ = false;
 +  producer_receiver_.reset();
 +  shmem_device_.reset();
 +  provider_->AddSharedMemoryVirtualDevice(
@@ -2252,9 +2334,11 @@ index 0000000..9f3bdf7
 +    mode_ = BackendMode::kSharedMemory;
 +    device_ready_ = true;
 +    texture_alloc_in_flight_ = false;
++    reclaim_in_flight_ = false;
 +    texture_pool_coded_size_ = gfx::Size();
 +    free_texture_slots_.clear();
 +    in_flight_texture_slots_.clear();
++    reserved_slots_.clear();
 +    if (!desired_coded_size_.IsEmpty() && !reserve_in_flight_) {
 +      reserve_in_flight_ = true;
 +      consecutive_empty_reserves_ = 0;
@@ -2384,6 +2468,9 @@ index 0000000..9f3bdf7
 +    if (cold_start_frame_ && cold_start_frame_->coded_size() == target_size) {
 +      cold_frame = std::move(cold_start_frame_);
 +      cold_slot = new_slots[0];
++      cold_slot->submit_seq = ++next_submit_seq_;
++      cold_slot->in_flight_since = base::TimeTicks::Now();
++      cold_slot->dma_in_progress = true;
 +      in_flight_texture_slots_[cold_slot->buffer_id] = cold_slot;
 +      for (size_t i = 1; i < new_slots.size(); ++i) {
 +        free_texture_slots_.push_back(std::move(new_slots[i]));
@@ -2429,23 +2516,29 @@ index 0000000..9f3bdf7
 +                FROM_HERE,
 +                base::BindOnce(
 +                    &ExternalVideoSource::HandleTextureUploadFailureOnSequence,
-+                    src, id));
++                    src, id, "D3D12 cold-start copy queue fence failed"));
 +          }
 +        },
 +        self, buf_id, slot_size, vis_rect, ts_us, rt, cs);
 +
-+    if (!cold_slot->uploader ||
-+        !cold_slot->uploader->SubmitAsyncUploadNV12(
-+            cold_slot->d3d12_resource, cold_slot->footprints,
-+            cold_slot->upload_total_bytes, slot_size,
-+            cold_frame->data(media::VideoFrame::kYPlane),
-+            cold_frame->stride(media::VideoFrame::kYPlane),
-+            cold_frame->data(media::VideoFrame::kUPlane),
-+            cold_frame->stride(media::VideoFrame::kUPlane),
-+            cold_frame->data(media::VideoFrame::kVPlane),
-+            cold_frame->stride(media::VideoFrame::kVPlane), vis_rect.width(),
-+            vis_rect.height(), std::move(on_dma_done))) {
-+      HandleTextureUploadFailureOnSequence(buf_id);
++    const auto status =
++        cold_slot->uploader
++            ? cold_slot->uploader->SubmitAsyncUploadNV12(
++                  cold_slot->d3d12_resource, cold_slot->footprints,
++                  cold_slot->upload_total_bytes, slot_size,
++                  cold_frame->data(media::VideoFrame::kYPlane),
++                  cold_frame->stride(media::VideoFrame::kYPlane),
++                  cold_frame->data(media::VideoFrame::kUPlane),
++                  cold_frame->stride(media::VideoFrame::kUPlane),
++                  cold_frame->data(media::VideoFrame::kVPlane),
++                  cold_frame->stride(media::VideoFrame::kVPlane),
++                  vis_rect.width(), vis_rect.height(), std::move(on_dma_done))
++            : SharedD3D12CopyUploader::UploadStatus::kFatalError;
++    if (status == SharedD3D12CopyUploader::UploadStatus::kTransientDrop) {
++      ReturnTransientDroppedSlot(buf_id);
++    } else if (status == SharedD3D12CopyUploader::UploadStatus::kFatalError) {
++      HandleTextureUploadFailureOnSequence(
++          buf_id, "D3D12 cold-start NV12 upload device failure");
 +      return;
 +    }
 +#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -2471,7 +2564,8 @@ index 0000000..9f3bdf7
 +      SubmitTextureFrameOnSequence(cold_slot->buffer_id, cold_slot->coded_size,
 +                                   vis_rect, ts_us, rt, cs);
 +    } else {
-+      HandleTextureUploadFailureOnSequence(cold_slot->buffer_id);
++      HandleTextureUploadFailureOnSequence(
++          cold_slot->buffer_id, "Linux cold-start NativePixmap Map failed");
 +      return;
 +    }
 +#endif
@@ -2482,6 +2576,144 @@ index 0000000..9f3bdf7
 +        FROM_HERE,
 +        base::BindOnce(&ExternalVideoSource::EnsureTexturePoolOnSequence,
 +                       base::WrapRefCounted(this)));
++  }
++}
++
++bool ExternalVideoSource::HasStaleInFlightSlotLocked(
++    base::TimeTicks now) const {
++  const bool pool_exhausted = free_texture_slots_.empty();
++  for (const auto& [id, slot] : in_flight_texture_slots_) {
++    if (slot->dma_in_progress) {
++      continue;
++    }
++    if (now - slot->in_flight_since < kStaleTextureSlotTimeout) {
++      continue;
++    }
++    // Reclaim only when a newer frame has ALREADY finished displaying (proving
++    // this older slot was leaked by BroadcastingReceiver on client disconnect)
++    // OR when all 3 slots in the pool are wedged while PushFrame is active.
++    // A single legitimate paused <video> frame is never disturbed.
++    if (slot->submit_seq < last_completed_seq_ || pool_exhausted) {
++      return true;
++    }
++  }
++  return false;
++}
++
++void ExternalVideoSource::ReclaimStaleTextureSlotsOnSequence() {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++
++  std::vector<scoped_refptr<TextureSlot>> stale_slots;
++  gfx::Size target_size;
++  gfx::ColorSpace target_cs;
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_ || mode_ != BackendMode::kTexture ||
++        !texture_device_.is_bound() || texture_alloc_in_flight_ ||
++        texture_pool_coded_size_.IsEmpty()) {
++      reclaim_in_flight_ = false;
++      return;
++    }
++
++    const base::TimeTicks now = base::TimeTicks::Now();
++    const bool pool_exhausted = free_texture_slots_.empty();
++    for (auto it = in_flight_texture_slots_.begin();
++         it != in_flight_texture_slots_.end();) {
++      const scoped_refptr<TextureSlot>& slot = it->second;
++      if (!slot->dma_in_progress &&
++          (now - slot->in_flight_since >= kStaleTextureSlotTimeout) &&
++          (slot->submit_seq < last_completed_seq_ || pool_exhausted)) {
++        stale_slots.push_back(slot);
++        it = in_flight_texture_slots_.erase(it);
++      } else {
++        ++it;
++      }
++    }
++
++    if (stale_slots.empty()) {
++      reclaim_in_flight_ = false;
++      return;
++    }
++    target_size = texture_pool_coded_size_;
++    target_cs = desired_color_space_;
++  }
++
++  if (!gpu_channel_ || gpu_channel_->IsLost() || !sii_) {
++    FallbackToSharedMemoryOnSequence("GPU channel lost during slot reclaim");
++    return;
++  }
++
++  if (!target_cs.IsValid()) {
++    target_cs = ToGfxColorSpace(nullptr, target_size.height());
++  }
++
++  for (const auto& old_slot : stale_slots) {
++    if (registered_texture_buffer_ids_.erase(old_slot->buffer_id) > 0 &&
++        texture_device_.is_bound()) {
++      texture_device_->OnBufferRetired(old_slot->buffer_id);
++    }
++    DestroySlotSharedImagesOnSequence(*old_slot);
++  }
++
++  std::vector<scoped_refptr<TextureSlot>> replacements;
++  replacements.reserve(stale_slots.size());
++  for (size_t i = 0; i < stale_slots.size(); ++i) {
++    const int32_t new_id = next_texture_buffer_id_++;
++    scoped_refptr<TextureSlot> slot =
++        CreateTextureSlotOnSequence(new_id, target_size, target_cs);
++    if (!slot) {
++      for (const auto& partial : replacements) {
++        DestroySlotSharedImagesOnSequence(*partial);
++      }
++      FallbackToSharedMemoryOnSequence(
++          "failed to allocate replacement GPU NV12 texture slot");
++      return;
++    }
++    replacements.push_back(std::move(slot));
++  }
++
++  const gpu::SyncToken sync_token = sii_->GenVerifiedSyncToken();
++  if (!sync_token.HasData() || gpu_channel_->IsLost()) {
++    for (const auto& partial : replacements) {
++      DestroySlotSharedImagesOnSequence(*partial);
++    }
++    FallbackToSharedMemoryOnSequence(
++        "failed to verify replacement SharedImage SyncToken");
++    return;
++  }
++
++  for (const auto& slot : replacements) {
++    auto handle_set = media::mojom::MailboxBufferHandleSet::New();
++    handle_set->mailbox_holder.resize(media::VideoFrame::kMaxPlanes);
++    handle_set->mailbox_holder[0] =
++        gpu::MailboxHolder(slot->mailbox_y, sync_token, slot->texture_target);
++    handle_set->mailbox_holder[1] =
++        gpu::MailboxHolder(slot->mailbox_uv, sync_token, slot->texture_target);
++    texture_device_->OnNewMailboxHolderBufferHandle(slot->buffer_id,
++                                                    std::move(handle_set));
++    registered_texture_buffer_ids_.insert(slot->buffer_id);
++  }
++
++  std::vector<scoped_refptr<TextureSlot>> discard_slots;
++  {
++    base::AutoLock lock(lock_);
++    reclaim_in_flight_ = false;
++    if (!shut_down_ && mode_ == BackendMode::kTexture &&
++        texture_pool_coded_size_ == target_size) {
++      for (auto& slot : replacements) {
++        free_texture_slots_.push_back(std::move(slot));
++      }
++    } else {
++      discard_slots.swap(replacements);
++    }
++  }
++
++  for (const auto& slot : discard_slots) {
++    if (registered_texture_buffer_ids_.erase(slot->buffer_id) > 0 &&
++        texture_device_.is_bound()) {
++      texture_device_->OnBufferRetired(slot->buffer_id);
++    }
++    DestroySlotSharedImagesOnSequence(*slot);
 +  }
 +}
 +
@@ -2631,6 +2863,7 @@ index 0000000..9f3bdf7
 +    in_flight_slots.swap(in_flight_texture_slots_);
 +    texture_pool_coded_size_ = gfx::Size();
 +    texture_alloc_in_flight_ = false;
++    reclaim_in_flight_ = false;
 +  }
 +
 +  for (const auto& slot : free_slots) {
@@ -2667,6 +2900,8 @@ index 0000000..9f3bdf7
 +    if (it == in_flight_texture_slots_.end()) {
 +      return;
 +    }
++    it->second->dma_in_progress = false;
++    it->second->in_flight_since = base::TimeTicks::Now();
 +    slot = it->second;
 +  }
 +
@@ -2698,13 +2933,50 @@ index 0000000..9f3bdf7
 +}
 +
 +void ExternalVideoSource::HandleTextureUploadFailureOnSequence(
-+    int32_t buffer_id) {
++    int32_t buffer_id,
++    const char* reason) {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 +  {
 +    base::AutoLock lock(lock_);
 +    in_flight_texture_slots_.erase(buffer_id);
 +  }
-+  FallbackToSharedMemoryOnSequence("GPU NV12 DMA upload failed");
++  FallbackToSharedMemoryOnSequence(reason ? reason
++                                          : "GPU NV12 DMA upload failed");
++}
++
++void ExternalVideoSource::ReturnTransientDroppedSlot(int32_t buffer_id) {
++  scoped_refptr<TextureSlot> stale_slot;
++  {
++    base::AutoLock lock(lock_);
++    auto it = in_flight_texture_slots_.find(buffer_id);
++    if (it == in_flight_texture_slots_.end()) {
++      return;
++    }
++    scoped_refptr<TextureSlot> slot = std::move(it->second);
++    in_flight_texture_slots_.erase(it);
++    slot->dma_in_progress = false;
++    if (!shut_down_ && mode_ == BackendMode::kTexture &&
++        slot->coded_size == texture_pool_coded_size_) {
++      free_texture_slots_.push_back(std::move(slot));
++      return;
++    }
++    stale_slot = std::move(slot);
++  }
++  if (stale_slot) {
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(
++            [](scoped_refptr<ExternalVideoSource> self,
++               scoped_refptr<TextureSlot> s) {
++              if (self->registered_texture_buffer_ids_.erase(s->buffer_id) >
++                      0 &&
++                  self->texture_device_.is_bound()) {
++                self->texture_device_->OnBufferRetired(s->buffer_id);
++              }
++              self->DestroySlotSharedImagesOnSequence(*s);
++            },
++            base::WrapRefCounted(this), std::move(stale_slot)));
++  }
 +}
 +
 +void ExternalVideoSource::OnFinishedConsumingBuffer(int32_t buffer_id) {
@@ -2719,6 +2991,10 @@ index 0000000..9f3bdf7
 +    }
 +    scoped_refptr<TextureSlot> slot = std::move(it->second);
 +    in_flight_texture_slots_.erase(it);
++    slot->dma_in_progress = false;
++    if (slot->submit_seq > last_completed_seq_) {
++      last_completed_seq_ = slot->submit_seq;
++    }
 +
 +    if (!shut_down_ && mode_ == BackendMode::kTexture &&
 +        slot->coded_size == texture_pool_coded_size_) {
@@ -2738,23 +3014,29 @@ index 0000000..9f3bdf7
 +}
 +
 +// ---------------------------------------------------------------------------
-+// Pre-reserved SharedMemory fallback backend
++// Pre-reserved SharedMemory fallback backend (2-slot pre-reserved queue)
 +// ---------------------------------------------------------------------------
 +
 +void ExternalVideoSource::ReserveBufferOnSequence() {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  if (shmem_ipc_in_flight_) {
++    return;
++  }
++
 +  gfx::Size coded_size;
 +  {
 +    base::AutoLock lock(lock_);
 +    if (shut_down_ || mode_ != BackendMode::kSharedMemory ||
 +        !shmem_device_.is_bound() || desired_coded_size_.IsEmpty() ||
-+        reserved_slot_) {
++        reserved_slots_.size() >= kTargetReservedShmemSlots) {
 +      reserve_in_flight_ = false;
 +      return;
 +    }
++    reserve_in_flight_ = true;
 +    coded_size = desired_coded_size_;
 +  }
 +
++  shmem_ipc_in_flight_ = true;
 +  shmem_device_->RequestFrameBuffer(
 +      coded_size, media::PIXEL_FORMAT_I420, /*strides=*/nullptr,
 +      base::BindOnce(&ExternalVideoSource::OnBufferReserved,
@@ -2764,6 +3046,7 @@ index 0000000..9f3bdf7
 +void ExternalVideoSource::OnBufferReserved(gfx::Size requested_coded_size,
 +                                           int32_t buffer_id) {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  shmem_ipc_in_flight_ = false;
 +
 +  if (buffer_id == video_capture::mojom::kInvalidBufferId) {
 +    bool schedule_retry = false;
@@ -2772,7 +3055,7 @@ index 0000000..9f3bdf7
 +      has_completed_initial_setup_ = true;
 +      cold_start_frame_ = nullptr;
 +      if (!shut_down_ && mode_ == BackendMode::kSharedMemory &&
-+          shmem_device_.is_bound() &&
++          shmem_device_.is_bound() && reserved_slots_.empty() &&
 +          consecutive_empty_reserves_ < kMaxEmptyReserveRetries) {
 +        ++consecutive_empty_reserves_;
 +        schedule_retry = true;
@@ -2792,6 +3075,7 @@ index 0000000..9f3bdf7
 +
 +  scoped_refptr<SharedBufferSlot> slot;
 +  scoped_refptr<media::VideoFrame> cold_frame;
++  bool want_another_reserve = false;
 +  {
 +    base::AutoLock lock(lock_);
 +    if (shut_down_ || mode_ != BackendMode::kSharedMemory ||
@@ -2816,11 +3100,20 @@ index 0000000..9f3bdf7
 +    if (cold_start_frame_) {
 +      cold_frame = std::move(cold_start_frame_);
 +    } else {
-+      reserved_slot_ = std::move(slot);
-+      reserved_coded_size_ = requested_coded_size;
-+      reserve_in_flight_ = false;
-+      return;
++      reserved_slots_.emplace_back(std::move(slot), requested_coded_size);
++      want_another_reserve =
++          (reserved_slots_.size() < kTargetReservedShmemSlots);
++      if (!want_another_reserve) {
++        reserve_in_flight_ = false;
++      }
 +    }
++  }
++
++  if (!cold_frame) {
++    if (want_another_reserve) {
++      ReserveBufferOnSequence();
++    }
++    return;
 +  }
 +
 +  const size_t needed = media::VideoFrame::AllocationSize(
@@ -2922,6 +3215,13 @@ index 0000000..9f3bdf7
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 +  base::AutoLock lock(lock_);
 +  shmem_buffers_.erase(buffer_id);
++  for (auto it = reserved_slots_.begin(); it != reserved_slots_.end();) {
++    if (it->first && it->first->buffer_id == buffer_id) {
++      it = reserved_slots_.erase(it);
++    } else {
++      ++it;
++    }
++  }
 +}
 +
 +// ---------------------------------------------------------------------------
@@ -2940,6 +3240,7 @@ index 0000000..9f3bdf7
 +  d3d12_uploader_.reset();
 +#endif
 +
++  shmem_ipc_in_flight_ = false;
 +  shmem_device_.reset();
 +  producer_receiver_.reset();
 +  provider_.reset();
@@ -2949,7 +3250,7 @@ index 0000000..9f3bdf7
 +    shut_down_ = true;
 +    device_ready_ = false;
 +    reserve_in_flight_ = false;
-+    reserved_slot_ = nullptr;
++    reserved_slots_.clear();
 +    cold_start_frame_ = nullptr;
 +    shmem_buffers_.clear();
 +  }
@@ -3038,10 +3339,10 @@ index 0000000..9f3bdf7
 +}
 diff --git a/cef/libcef/browser/external_video_source.h b/cef/libcef/browser/external_video_source.h
 new file mode 100644
-index 0000000..8489efd
+index 0000000..89a1558
 --- /dev/null
 +++ b/cef/libcef/browser/external_video_source.h
-@@ -0,0 +1,247 @@
+@@ -0,0 +1,258 @@
 +// Copyright (c) 2026. All rights reserved.
 +//
 +// Implementation of include/cef_external_video.h. See that header for the
@@ -3057,6 +3358,7 @@ index 0000000..8489efd
 +#include <memory>
 +#include <set>
 +#include <string>
++#include <utility>
 +
 +#include "base/memory/raw_ptr.h"
 +#include "base/memory/ref_counted.h"
@@ -3201,6 +3503,7 @@ index 0000000..8489efd
 +
 +  // Hardware texture backend (|task_runner_| only).
 +  void EnsureTexturePoolOnSequence();
++  void ReclaimStaleTextureSlotsOnSequence();
 +  scoped_refptr<TextureSlot> CreateTextureSlotOnSequence(
 +      int32_t buffer_id,
 +      const gfx::Size& coded_size,
@@ -3213,7 +3516,11 @@ index 0000000..8489efd
 +                                    int64_t timestamp_us,
 +                                    base::TimeTicks reference_time,
 +                                    gfx::ColorSpace color_space);
-+  void HandleTextureUploadFailureOnSequence(int32_t buffer_id);
++  void HandleTextureUploadFailureOnSequence(int32_t buffer_id,
++                                            const char* reason);
++  void ReturnTransientDroppedSlot(int32_t buffer_id);
++  bool HasStaleInFlightSlotLocked(base::TimeTicks now) const
++      EXCLUSIVE_LOCKS_REQUIRED(lock_);
 +
 +  // Pre-reserved shared-memory fallback backend (|task_runner_| only).
 +  void ReserveBufferOnSequence();
@@ -3253,18 +3560,22 @@ index 0000000..8489efd
 +  std::deque<scoped_refptr<TextureSlot>> free_texture_slots_ GUARDED_BY(lock_);
 +  std::map<int32_t, scoped_refptr<TextureSlot>> in_flight_texture_slots_
 +      GUARDED_BY(lock_);
++  uint64_t next_submit_seq_ GUARDED_BY(lock_) = 0;
++  uint64_t last_completed_seq_ GUARDED_BY(lock_) = 0;
 +  bool texture_alloc_in_flight_ GUARDED_BY(lock_) = false;
++  bool reclaim_in_flight_ GUARDED_BY(lock_) = false;
 +
 +  // SharedMemory fallback shared state (guarded by |lock_|).
 +  std::map<int32_t, scoped_refptr<SharedBufferSlot>> shmem_buffers_
 +      GUARDED_BY(lock_);
-+  scoped_refptr<SharedBufferSlot> reserved_slot_ GUARDED_BY(lock_);
-+  gfx::Size reserved_coded_size_ GUARDED_BY(lock_);
++  std::deque<std::pair<scoped_refptr<SharedBufferSlot>, gfx::Size>>
++      reserved_slots_ GUARDED_BY(lock_);
 +  bool reserve_in_flight_ GUARDED_BY(lock_) = false;
 +  int consecutive_empty_reserves_ GUARDED_BY(lock_) = 0;
 +
 +  // |task_runner_| only.
 +  mojo::Remote<video_capture::mojom::VideoSourceProvider> provider_;
++  bool logged_shmem_fallback_ = false;
 +
 +  // Texture mode sequence-only members.
 +  mojo::Remote<video_capture::mojom::TextureVirtualDevice> texture_device_;
@@ -3284,6 +3595,7 @@ index 0000000..8489efd
 +  // SharedMemory mode sequence-only members.
 +  mojo::Remote<video_capture::mojom::SharedMemoryVirtualDevice> shmem_device_;
 +  mojo::Receiver<video_capture::mojom::Producer> producer_receiver_{this};
++  bool shmem_ipc_in_flight_ = false;
 +};
 +
 +}  // namespace cef_external_video
