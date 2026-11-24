@@ -1,5 +1,5 @@
 diff --git a/cef/BUILD.gn b/cef/BUILD.gn
-index 4cae380..5fc2f13 100644
+index 4cae38082..db8308d54 100644
 --- a/cef/BUILD.gn
 +++ b/cef/BUILD.gn
 @@ -604,6 +604,8 @@ source_set("libcef_static") {
@@ -37,8 +37,20 @@ index 4cae380..5fc2f13 100644
      "//third_party/widevine/cdm:headers",
      "//third_party/widevine/cdm",
      "//third_party/icu",
+@@ -1155,6 +1162,11 @@ source_set("libcef_static") {
+       "//chrome/app/chrome_main_mac.h",
+       "//chrome/app/chrome_main_mac.mm",
+     ]
++
++    frameworks = [
++      "CoreFoundation.framework",
++      "IOSurface.framework",
++    ]
+   }
+ 
+   if (ozone_platform_x11) {
 diff --git a/cef/cef_paths2.gypi b/cef/cef_paths2.gypi
-index 1b876e3..92e2675 100644
+index 1b876e3b6..92e26754d 100644
 --- a/cef/cef_paths2.gypi
 +++ b/cef/cef_paths2.gypi
 @@ -37,6 +37,7 @@
@@ -51,17 +63,19 @@ index 1b876e3..92e2675 100644
        'include/internal/cef_ptr.h',
 diff --git a/cef/include/cef_external_video.h b/cef/include/cef_external_video.h
 new file mode 100644
-index 0000000..f914f3c
+index 000000000..6fe769efa
 --- /dev/null
 +++ b/cef/include/cef_external_video.h
-@@ -0,0 +1,365 @@
+@@ -0,0 +1,514 @@
 +// Copyright (c) 2026. All rights reserved.
 +//
 +// External video source API (custom extension, not part of upstream CEF).
 +//
-+// Lets the host application push decoded YUV 4:2:0 frames (YV12 / I420) into
-+// Chromium. Each source is registered as a virtual video capture device, so a
-+// page can show it with:
++// Lets the host application push decoded video frames into Chromium — either as
++// CPU YUV 4:2:0 planes (YV12 / I420) or directly as OS-shared GPU surfaces
++// (Windows D3D11 shared textures, Linux DMA-BUF fds, macOS IOSurfaces). Each
++// source is registered as a virtual video capture device, so a page can show it
++// with:
 +//
 +//   const d = (await navigator.mediaDevices.enumerateDevices())
 +//                 .find(x => x.kind === 'videoinput' && x.label === label);
@@ -82,13 +96,13 @@ index 0000000..f914f3c
 +//   secure).
 +// - This is a live-stream path: the newest frame is shown as soon as it
 +//   arrives. Frames pushed faster than they can be delivered are dropped.
-+// - Only 8-bit 4:2:0 SDR content is supported.
 +
 +#ifndef CEF_INCLUDE_CEF_EXTERNAL_VIDEO_H_
 +#define CEF_INCLUDE_CEF_EXTERNAL_VIDEO_H_
 +#pragma once
 +
 +#include <stdint.h>
++#include <string.h>
 +
 +#include "include/internal/cef_export.h"
 +
@@ -161,7 +175,8 @@ index 0000000..f914f3c
 +// from the specified ones. If primaries, transfer and matrix are all
 +// unspecified, the frame size decides: height >= 720 -> BT.709, otherwise
 +// BT.601 (SMPTE 170M), which is what FFmpeg and most players do. Unspecified
-+// range means LIMITED.
++// range means LIMITED. For BGRA8 / RGBA8 GPU textures where |color| is NULL,
++// full-range sRGB is used by default.
 +//
 +// Practical advice when nothing is signaled:
 +// - HD (720p and up) content: BT.709 + LIMITED is by far the most common.
@@ -237,13 +252,11 @@ index 0000000..f914f3c
 +  CEF_EXTERNAL_VIDEO_TRANSFER_BT2020_10 = 14,
 +  /// BT.2020 12-bit (same curve as BT709 = 1).
 +  CEF_EXTERNAL_VIDEO_TRANSFER_BT2020_12 = 15,
-+  /// SMPTE ST 2084 / BT.2100 PQ (HDR10). HDR: not meaningful for this 8-bit
-+  /// path, avoid.
++  /// SMPTE ST 2084 / BT.2100 PQ (HDR10).
 +  CEF_EXTERNAL_VIDEO_TRANSFER_SMPTEST2084 = 16,
 +  /// SMPTE ST 428-1.
 +  CEF_EXTERNAL_VIDEO_TRANSFER_SMPTEST428_1 = 17,
-+  /// ARIB STD-B67 / BT.2100 HLG. HDR: not meaningful for this 8-bit path,
-+  /// avoid.
++  /// ARIB STD-B67 / BT.2100 HLG.
 +  CEF_EXTERNAL_VIDEO_TRANSFER_ARIB_STD_B67 = 18,
 +} cef_external_video_transfer_t;
 +
@@ -281,7 +294,7 @@ index 0000000..f914f3c
 +/// FFmpeg's AVColorRange.
 +///
 +typedef enum {
-+  /// Unknown: treated as LIMITED.
++  /// Unknown: treated as LIMITED for YUV, FULL for BGRA8/RGBA8.
 +  CEF_EXTERNAL_VIDEO_RANGE_UNSPECIFIED = 0,
 +  /// Limited / "TV" / "MPEG" / studio range: Y 16..235, U/V 16..240.
 +  /// Used by almost all broadcast and internet video.
@@ -328,9 +341,10 @@ index 0000000..f914f3c
 +/// |max_width| x |max_height| @ |max_fps| is registered as the device's only
 +/// supported format. Pass 0 for any of them to use the defaults above. What
 +/// they affect:
-+/// - Upper bound of the frame size: cef_external_video_push_frame() rejects
-+///   larger frames. Smaller frames are shown unchanged (never upscaled), so a
-+///   large value costs nothing; buffers are sized per actual frame.
++/// - Upper bound of the frame size: cef_external_video_push_frame() and
++///   cef_external_video_push_gpu_frame() reject larger frames. Smaller frames
++///   are shown unchanged (never upscaled), so a large value costs nothing;
++///   buffers are sized per actual frame.
 +/// - getUserMedia() constraints are checked against this format (e.g. asking
 +///   for {width: {min: 3840}} fails if max_width is 1920), and
 +///   track.getSettings() reports it as width/height. Use video.videoWidth /
@@ -386,6 +400,134 @@ index 0000000..f914f3c
 +    int64_t timestamp_us,
 +    const cef_external_video_color_t* color);
 +
++// ---------------------------------------------------------------------------
++// Cross-platform GPU surface / hardware-decoded texture input
++// ---------------------------------------------------------------------------
++
++///
++/// Pixel format of a GPU-backed video frame.
++/// On Windows (D3D11) and macOS (IOSurface), passing CEF_EXT_GPU_FORMAT_AUTO
++/// (0) inspects the native surface descriptor automatically.
++///
++typedef enum {
++  CEF_EXT_GPU_FORMAT_AUTO = 0,
++  CEF_EXT_GPU_FORMAT_NV12 = 1,
++  CEF_EXT_GPU_FORMAT_P010 = 2,
++  CEF_EXT_GPU_FORMAT_BGRA8 = 3,
++  CEF_EXT_GPU_FORMAT_RGBA8 = 4,
++} cef_external_video_gpu_format_t;
++
++///
++/// OS-native shared GPU surface handle type.
++///
++typedef enum {
++  /// Windows Direct3D 11 shared 2D texture handle (supports both legacy
++  /// D3D11_RESOURCE_MISC_SHARED GetSharedHandle and MISC_SHARED_NTHANDLE).
++  CEF_EXT_GPU_HANDLE_WIN_D3D11 = 1,
++  /// Linux DMA-BUF file descriptor(s) + DRM format modifier.
++  CEF_EXT_GPU_HANDLE_LINUX_DMABUF = 2,
++  /// macOS IOSurfaceRef or global IOSurfaceID.
++  CEF_EXT_GPU_HANDLE_MAC_IOSURFACE = 3,
++} cef_external_video_gpu_handle_type_t;
++
++///
++/// Optional callback invoked when CEF's GPU compositor finishes reading a
++/// zero-copy borrowed GPU surface (only used when |release_callback| != NULL).
++///
++typedef void (*cef_external_video_release_cb)(void* release_ctx);
++
++///
++/// Cross-platform GPU video frame descriptor for
++/// cef_external_video_push_gpu_frame().
++///
++typedef struct _cef_external_video_gpu_frame_t {
++  /// Must be set to sizeof(cef_external_video_gpu_frame_t).
++  uint32_t struct_size;
++  cef_external_video_gpu_handle_type_t handle_type;
++  cef_external_video_gpu_format_t format;
++
++  /// Coded dimensions of the GPU surface. On Windows and macOS, pass 0 for
++  /// both |coded_width| and |coded_height| to query them from the surface;
++  /// on Linux DMA-BUF they must be specified explicitly.
++  int coded_width;
++  int coded_height;
++
++  /// Visible crop rectangle inside [0..coded_width] x [0..coded_height] (e.g.
++  /// coded 1920x1088 cropped to visible 1920x1080). Leave |visible_width| /
++  /// |visible_height| as 0 to display from (visible_x, visible_y) to the full
++  /// coded extent.
++  int visible_x;
++  int visible_y;
++  int visible_width;
++  int visible_height;
++
++  int64_t timestamp_us;
++  const cef_external_video_color_t* color;
++
++  /// Optional stable identifier for a pooled decoder surface so CEF can cache
++  /// imported SharedImages across frames in zero-copy mode. When 0, Windows and
++  /// macOS derive a key from the handle / IOSurfaceID automatically.
++  uint64_t surface_key;
++
++  union {
++    struct {
++      /// Shared HANDLE from IDXGIResource::GetSharedHandle or
++      /// IDXGIResource1::CreateSharedHandle (e.g. PlayM4 hTexture).
++      void* shared_handle;
++      /// 0 = auto-detect (tries legacy OpenSharedResource first, then
++      /// OpenSharedResource1); 1 = force NT handle (OpenSharedResource1).
++      int32_t is_nt_handle;
++      /// Key values for IDXGIKeyedMutex::AcquireSync / ReleaseSync if the
++      /// texture was created with D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX
++      /// (default 0). Ignored when the texture has no IDXGIKeyedMutex.
++      uint64_t keyed_mutex_acq;
++      uint64_t keyed_mutex_rel;
++    } win_d3d11;
++
++    struct {
++      int plane_count;
++      int fds[4];
++      uint32_t strides[4];
++      uint32_t offsets[4];
++      /// DRM_FORMAT_MOD_* (0 = DRM_FORMAT_MOD_LINEAR; 0x00ffffffffffffffULL =
++      /// DRM_FORMAT_MOD_INVALID / implicit driver layout).
++      uint64_t drm_modifier;
++      /// Optional explicit sync_file fd (-1 if using implicit DMA-BUF sync).
++      int sync_fence_fd;
++    } linux_dmabuf;
++
++    struct {
++      /// IOSurfaceRef in the current process, or NULL to look up |io_surface_id|.
++      void* io_surface_ref;
++      uint32_t io_surface_id;
++    } mac_iosurface;
++  } handle;
++
++  /// Lifetime mode:
++  /// - NULL (default, copy-on-push in VRAM): CEF copies the surface into its
++  ///   own GPU texture pool before returning, so the caller's surface may be
++  ///   overwritten or destroyed immediately after this call returns.
++  /// - Non-NULL (zero-copy borrow): CEF imports the caller's surface directly
++  ///   when supported. If cef_external_video_push_gpu_frame() returns 1, CEF
++  ///   guarantees |release_callback(release_ctx)| will be invoked exactly once
++  ///   when the frame is no longer in use (or if dropped asynchronously). If it
++  ///   returns 0, CEF did not take ownership and |release_callback| is NOT
++  ///   called.
++  cef_external_video_release_cb release_callback;
++  void* release_ctx;
++} cef_external_video_gpu_frame_t;
++
++///
++/// Pushes one GPU-backed frame into |source|.
++///
++/// Returns 1 if accepted (including when dropped due to downstream backpressure
++/// while keeping the stream healthy), or 0 if rejected (invalid arguments, GPU
++/// backend unavailable/mismatched adapter, or |source| is shutting down).
++///
++CEF_EXPORT int cef_external_video_push_gpu_frame(
++    cef_external_video_t* source,
++    const cef_external_video_gpu_frame_t* frame);
++
 +///
 +/// Unregisters the device and frees the source. Pages that are showing it see
 +/// the track end. |source| must not be used afterwards.
@@ -415,6 +557,25 @@ index 0000000..f914f3c
 +                                       color);
 +}
 +
++///
++/// Convenience helper for synchronous D3D11 shared-texture render callbacks
++/// (such as PlayM4_RegisterTextureDrawFun) where dimensions and pixel format
++/// are read automatically from |hTexture| and copied in VRAM before returning.
++///
++static inline int cef_external_video_push_d3d11_texture(
++    cef_external_video_t* source,
++    void* hTexture,
++    int64_t timestamp_us) {
++  cef_external_video_gpu_frame_t f;
++  memset(&f, 0, sizeof(f));
++  f.struct_size = (uint32_t)sizeof(f);
++  f.handle_type = CEF_EXT_GPU_HANDLE_WIN_D3D11;
++  f.format = CEF_EXT_GPU_FORMAT_AUTO;
++  f.timestamp_us = timestamp_us;
++  f.handle.win_d3d11.shared_handle = hTexture;
++  return cef_external_video_push_gpu_frame(source, &f);
++}
++
 +#ifdef __cplusplus
 +}
 +#endif
@@ -422,16 +583,17 @@ index 0000000..f914f3c
 +#endif  // CEF_INCLUDE_CEF_EXTERNAL_VIDEO_H_
 diff --git a/cef/libcef/browser/external_video_source.cc b/cef/libcef/browser/external_video_source.cc
 new file mode 100644
-index 0000000..8dcab58
+index 000000000..df5c88783
 --- /dev/null
 +++ b/cef/libcef/browser/external_video_source.cc
-@@ -0,0 +1,2911 @@
+@@ -0,0 +1,5246 @@
 +// Copyright (c) 2026. All rights reserved.
 +
 +#include "libcef/browser/external_video_source.h"
 +
 +#include <GLES2/gl2.h>
 +
++#include <algorithm>
 +#include <atomic>
 +#include <cstring>
 +#include <utility>
@@ -462,6 +624,7 @@ index 0000000..8dcab58
 +#include "gpu/config/gpu_info.h"
 +#include "gpu/ipc/client/client_shared_image_interface.h"
 +#include "gpu/ipc/client/gpu_channel_host.h"
++#include "gpu/ipc/common/gpu_memory_buffer_impl.h"
 +#include "gpu/ipc/common/surface_handle.h"
 +#include "media/base/video_color_space.h"
 +#include "media/capture/mojom/video_capture_buffer.mojom.h"
@@ -475,10 +638,12 @@ index 0000000..8dcab58
 +#include "third_party/skia/include/gpu/GrTypes.h"
 +#include "ui/gfx/buffer_types.h"
 +#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/gpu_fence.h"
++#include "ui/gfx/gpu_fence_handle.h"
 +#include "ui/gfx/gpu_memory_buffer.h"
 +
 +#if BUILDFLAG(IS_WIN)
-+#include <d3d11_1.h>
++#include <d3d11_4.h>
 +#include <d3d12.h>
 +#include <dxgi1_4.h>
 +#include <thread>
@@ -488,6 +653,18 @@ index 0000000..8dcab58
 +#endif
 +#include "base/win/scoped_handle.h"
 +#include "gpu/ipc/common/gpu_memory_buffer_impl_dxgi.h"
++#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++#include <sys/mman.h>
++#include <unistd.h>
++#include "base/files/scoped_file.h"
++#include "base/posix/eintr_wrapper.h"
++#include "ui/gfx/native_pixmap_handle.h"
++#elif BUILDFLAG(IS_MAC)
++#include <CoreFoundation/CoreFoundation.h>
++#include <IOSurface/IOSurface.h>
++#include "base/mac/scoped_cftyperef.h"
++#include "gpu/ipc/common/gpu_memory_buffer_impl_io_surface.h"
++#include "ui/gfx/mac/io_surface.h"
 +#endif
 +
 +#if defined(ARCH_CPU_X86_FAMILY) && !BUILDFLAG(IS_NACL)
@@ -505,24 +682,86 @@ index 0000000..8dcab58
 +
 +namespace cef_external_video {
 +
++// ---------------------------------------------------------------------------
++// RAII Release Callback Guard
++// ---------------------------------------------------------------------------
++
++class ExternalVideoSource::ScopedGpuReleaseRunner {
++ public:
++  ScopedGpuReleaseRunner() = default;
++  ScopedGpuReleaseRunner(cef_external_video_release_cb cb, void* ctx)
++      : cb_(cb), ctx_(ctx) {}
++
++  ScopedGpuReleaseRunner(ScopedGpuReleaseRunner&& other) noexcept
++      : cb_(other.cb_), ctx_(other.ctx_) {
++    other.cb_ = nullptr;
++    other.ctx_ = nullptr;
++  }
++
++  ScopedGpuReleaseRunner& operator=(ScopedGpuReleaseRunner&& other) noexcept {
++    if (this != &other) {
++      RunNow();
++      cb_ = other.cb_;
++      ctx_ = other.ctx_;
++      other.cb_ = nullptr;
++      other.ctx_ = nullptr;
++    }
++    return *this;
++  }
++
++  ScopedGpuReleaseRunner(const ScopedGpuReleaseRunner&) = delete;
++  ScopedGpuReleaseRunner& operator=(const ScopedGpuReleaseRunner&) = delete;
++
++  ~ScopedGpuReleaseRunner() { RunNow(); }
++
++  bool HasCallback() const { return cb_ != nullptr; }
++
++  void RunNow() {
++    if (cb_) {
++      cef_external_video_release_cb fn = cb_;
++      void* arg = ctx_;
++      cb_ = nullptr;
++      ctx_ = nullptr;
++      fn(arg);
++    }
++  }
++
++  void Disarm() {
++    cb_ = nullptr;
++    ctx_ = nullptr;
++  }
++
++ private:
++  cef_external_video_release_cb cb_ = nullptr;
++  void* ctx_ = nullptr;
++};
++
 +namespace {
 +
 +constexpr size_t kTexturePoolSlots = 3;
++constexpr size_t kMaxImportedLruSlots = 16;
 +constexpr size_t kTargetReservedShmemSlots = 2;
 +constexpr int kMaxEmptyReserveRetries = 6;
 +constexpr base::TimeDelta kEmptyReserveRetryDelay = base::Milliseconds(2);
 +constexpr base::TimeDelta kStaleTextureSlotTimeout = base::Milliseconds(1200);
 +constexpr int kMaxHardwareTextureDimension = 16384;
 +
-+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++std::atomic<int32_t> g_next_gmb_id{1};
++
++gfx::GpuMemoryBufferId NextGpuMemoryBufferId() {
++  return gfx::GpuMemoryBufferId(
++      g_next_gmb_id.fetch_add(1, std::memory_order_relaxed));
++}
++
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
++    BUILDFLAG(IS_MAC)
 +std::atomic<bool> g_logged_texture_active{false};
 +
 +void LogTextureBackendActivatedOnce(const char* detail) {
 +  bool expected = false;
 +  if (g_logged_texture_active.compare_exchange_strong(
 +          expected, true, std::memory_order_relaxed)) {
-+    LOG(INFO) << "cef_external_video: activated hardware NV12 GPU texture "
-+                 "backend ("
++    LOG(INFO) << "cef_external_video: activated hardware GPU texture backend ("
 +              << detail << ")";
 +  }
 +}
@@ -546,15 +785,60 @@ index 0000000..8dcab58
 +#endif
 +  return true;
 +}
-+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++#endif
++
++#if BUILDFLAG(IS_MAC)
++constexpr uint32_t MakeFourCC(char a, char b, char c, char d) {
++  return (static_cast<uint32_t>(static_cast<uint8_t>(a)) << 24) |
++         (static_cast<uint32_t>(static_cast<uint8_t>(b)) << 16) |
++         (static_cast<uint32_t>(static_cast<uint8_t>(c)) << 8) |
++         static_cast<uint32_t>(static_cast<uint8_t>(d));
++}
++#endif
++
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++// Lightweight GpuMemoryBufferImpl wrapper for imported DMA-BUF handles
++// (including tiled hardware-decoder DRM modifiers that cannot be CPU-mmapped by
++// ClientNativePixmapFactory). SharedImageInterfaceProxy only invokes
++// GetType(), GetSize(), GetFormat(), and CloneHandle().
++class ExternalNativePixmapGmbImpl : public gpu::GpuMemoryBufferImpl {
++ public:
++  ExternalNativePixmapGmbImpl(gfx::GpuMemoryBufferId id,
++                              const gfx::Size& size,
++                              gfx::BufferFormat format,
++                              gfx::NativePixmapHandle pixmap_handle)
++      : gpu::GpuMemoryBufferImpl(id, size, format, base::DoNothing()),
++        pixmap_handle_(std::move(pixmap_handle)) {}
++
++  ~ExternalNativePixmapGmbImpl() override = default;
++
++  bool Map() override { return false; }
++  void* memory(size_t plane) override { return nullptr; }
++  void Unmap() override {}
++  int stride(size_t plane) const override {
++    return plane < pixmap_handle_.planes.size()
++               ? static_cast<int>(pixmap_handle_.planes[plane].stride)
++               : 0;
++  }
++  gfx::GpuMemoryBufferType GetType() const override {
++    return gfx::NATIVE_PIXMAP;
++  }
++  gfx::GpuMemoryBufferHandle CloneHandle() const override {
++    gfx::GpuMemoryBufferHandle h;
++    h.type = gfx::NATIVE_PIXMAP;
++    h.id = id_;
++    h.native_pixmap_handle = gfx::CloneHandleForIPC(pixmap_handle_);
++    return h;
++  }
++
++ private:
++  gfx::NativePixmapHandle pixmap_handle_;
++};
++#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 +
 +// ---------------------------------------------------------------------------
 +// Cross-platform non-temporal streaming plane copy & UV interleaving
 +// (x86 AVX2 / SSE2 + ARM64 NEON STNP + generic scalar fallback).
-+//
-+// All destination writes are strictly write-only (never reading back from
-+// |dst|) so write-combined (USWC) D3D12 UPLOAD / DRM buffers never incur
-+// uncached read-back stalls.
 +// ---------------------------------------------------------------------------
 +
 +#if defined(ARCH_CPU_X86_FAMILY) && !BUILDFLAG(IS_NACL)
@@ -771,8 +1055,6 @@ index 0000000..8dcab58
 +    count -= peel;
 +  }
 +
-+  // Clang lowers consecutive 16-byte __builtin_nontemporal_store calls on
-+  // AArch64 to native `stnp q0, q1, [dst]` non-temporal pair instructions.
 +  using Vec16B = uint64_t __attribute__((vector_size(16)));
 +  while (count >= 64) {
 +    Vec16B v0, v1, v2, v3;
@@ -911,7 +1193,26 @@ index 0000000..8dcab58
 +  }
 +}
 +
-+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++[[maybe_unused]] void StreamCopyRawRows(const uint8_t* src,
++                                        int src_stride,
++                                        uint8_t* dst,
++                                        int dst_stride,
++                                        size_t row_bytes,
++                                        int rows) {
++  if (rows <= 0 || row_bytes == 0) {
++    return;
++  }
++  if (static_cast<size_t>(src_stride) == row_bytes &&
++      static_cast<size_t>(dst_stride) == row_bytes) {
++    StreamCopyBytes(src, dst, row_bytes * static_cast<size_t>(rows));
++  } else {
++    for (int r = 0; r < rows; ++r) {
++      StreamCopyBytes(src + static_cast<size_t>(r) * src_stride,
++                      dst + static_cast<size_t>(r) * dst_stride, row_bytes);
++    }
++  }
++}
++
 +void StreamInterleaveUVPlane(const uint8_t* u,
 +                             int u_stride,
 +                             const uint8_t* v,
@@ -987,7 +1288,6 @@ index 0000000..8dcab58
 +                          chroma_coded_h);
 +  StreamStoreFence();
 +}
-+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 +
 +void StreamCopyI420ToMapping(const uint8_t* y,
 +                             int y_stride,
@@ -1075,18 +1375,140 @@ index 0000000..8dcab58
 +}  // namespace
 +
 +// ---------------------------------------------------------------------------
-+// Windows D3D11 + D3D12 Async Hardware DMA Copy-Queue Uploader
-+//
-+// Key design properties:
-+// - Target NV12 textures are created on D3D11 with SHARED_NTHANDLE | SHARED
-+//   (no IDXGIKeyedMutex!), so Viz's 144Hz D3DImageBacking samples them with
-+//   zero kernel mutex calls or 3D pipeline stalls.
-+// - Uploads run exclusively on D3D12's D3D12_COMMAND_LIST_TYPE_COPY hardware
-+//   DMA engine (~2,000+ 4K frames/sec on PCIe 4.0 x16, 0% GPU 3D engine usage
-+//   in the Browser process).
-+// - OnFrameReadyInBuffer is dispatched by a dedicated ID3D12Fence completion
-+//   thread strictly AFTER the DMA copy finishes in VRAM, guaranteeing tear-free
-+//   reads in Viz without cross-process locks.
++// Format helpers
++// ---------------------------------------------------------------------------
++
++namespace {
++
++using SlotPixelFormat = ExternalVideoSource::SlotPixelFormat;
++
++bool IsBiplanarSlotFormat(SlotPixelFormat fmt) {
++  return fmt == SlotPixelFormat::kNV12 || fmt == SlotPixelFormat::kP010;
++}
++
++gfx::BufferFormat ToGfxBufferFormat(SlotPixelFormat fmt) {
++  switch (fmt) {
++    case SlotPixelFormat::kNV12:
++      return gfx::BufferFormat::YUV_420_BIPLANAR;
++    case SlotPixelFormat::kP010:
++      return gfx::BufferFormat::P010;
++    case SlotPixelFormat::kBGRA8:
++      return gfx::BufferFormat::BGRA_8888;
++    case SlotPixelFormat::kRGBA8:
++      return gfx::BufferFormat::RGBA_8888;
++  }
++  return gfx::BufferFormat::YUV_420_BIPLANAR;
++}
++
++media::VideoPixelFormat ToMediaVideoPixelFormat(SlotPixelFormat fmt) {
++  switch (fmt) {
++    case SlotPixelFormat::kNV12:
++      return media::PIXEL_FORMAT_NV12;
++    case SlotPixelFormat::kP010:
++      return media::PIXEL_FORMAT_P016LE;
++    case SlotPixelFormat::kBGRA8:
++      // VideoResourceUpdater maps PIXEL_FORMAT_XRGB -> BGRA_8888 + opaque RGB,
++      // avoiding unwanted transparency if a video SDK leaves Alpha == 0.
++      return media::PIXEL_FORMAT_XRGB;
++    case SlotPixelFormat::kRGBA8:
++      return media::PIXEL_FORMAT_XBGR;
++  }
++  return media::PIXEL_FORMAT_NV12;
++}
++
++bool FromCefGpuFormat(cef_external_video_gpu_format_t fmt,
++                      SlotPixelFormat* out) {
++  switch (fmt) {
++    case CEF_EXT_GPU_FORMAT_NV12:
++      *out = SlotPixelFormat::kNV12;
++      return true;
++    case CEF_EXT_GPU_FORMAT_P010:
++      *out = SlotPixelFormat::kP010;
++      return true;
++    case CEF_EXT_GPU_FORMAT_BGRA8:
++      *out = SlotPixelFormat::kBGRA8;
++      return true;
++    case CEF_EXT_GPU_FORMAT_RGBA8:
++      *out = SlotPixelFormat::kRGBA8;
++      return true;
++    default:
++      return false;
++  }
++}
++
++gfx::ColorSpace ResolveGpuFrameColorSpace(
++    const cef_external_video_color_t* color,
++    int height,
++    SlotPixelFormat fmt) {
++  if (!IsBiplanarSlotFormat(fmt)) {
++    if (!color) {
++      return gfx::ColorSpace::CreateSRGB();
++    }
++    gfx::ColorSpace cs = ToGfxColorSpace(color, height).GetAsFullRangeRGB();
++    return cs.IsValid() ? cs : gfx::ColorSpace::CreateSRGB();
++  }
++  return ToGfxColorSpace(color, height);
++}
++
++bool ComputeAndValidateVisibleRect(const cef_external_video_gpu_frame_t& frame,
++                                   const gfx::Size& coded_size,
++                                   const gfx::Size& max_size,
++                                   SlotPixelFormat fmt,
++                                   gfx::Rect* out_visible_rect) {
++  if (coded_size.width() <= 0 || coded_size.height() <= 0 ||
++      coded_size.width() > max_size.width() ||
++      coded_size.height() > max_size.height() ||
++      coded_size.width() > kMaxHardwareTextureDimension ||
++      coded_size.height() > kMaxHardwareTextureDimension) {
++    return false;
++  }
++  if (!gpu::IsImageSizeValidForGpuMemoryBufferFormat(coded_size,
++                                                     ToGfxBufferFormat(fmt))) {
++    return false;
++  }
++
++  const int vx = frame.visible_x;
++  const int vy = frame.visible_y;
++  if (vx < 0 || vy < 0 || vx >= coded_size.width() ||
++      vy >= coded_size.height()) {
++    return false;
++  }
++  const int vw =
++      (frame.visible_width == 0) ? (coded_size.width() - vx) : frame.visible_width;
++  const int vh = (frame.visible_height == 0) ? (coded_size.height() - vy)
++                                             : frame.visible_height;
++  if (vw <= 0 || vh <= 0 || vx + vw > coded_size.width() ||
++      vy + vh > coded_size.height()) {
++    return false;
++  }
++  if (IsBiplanarSlotFormat(fmt) && ((vx & 1) != 0 || (vy & 1) != 0)) {
++    return false;
++  }
++
++  const gfx::Rect vis(vx, vy, vw, vh);
++  if (!media::VideoFrame::IsValidConfig(ToMediaVideoPixelFormat(fmt),
++                                        media::VideoFrame::STORAGE_OPAQUE,
++                                        coded_size, vis, vis.size())) {
++    return false;
++  }
++  *out_visible_rect = vis;
++  return true;
++}
++
++#if BUILDFLAG(IS_WIN)
++CHROME_LUID QueryCurrentActiveGpuLuid() {
++  auto* mgr = content::GpuDataManagerImpl::GetInstance();
++  if (mgr) {
++    return mgr->GetGPUInfo().active_gpu().luid;
++  }
++  return CHROME_LUID{0, 0};
++}
++#endif
++
++}  // namespace
++
++// ---------------------------------------------------------------------------
++// Windows D3D11 + D3D12 Async Hardware DMA & VRAM Texture Copier
 +// ---------------------------------------------------------------------------
 +
 +#if BUILDFLAG(IS_WIN)
@@ -1126,8 +1548,113 @@ index 0000000..8dcab58
 +           SUCCEEDED(d3d12_device_->GetDeviceRemovedReason());
 +  }
 +
-+  bool CreateSharedNV12Texture(
++  static DXGI_FORMAT ToSlotDxgiFormat(SlotPixelFormat fmt) {
++    switch (fmt) {
++      case SlotPixelFormat::kNV12:
++      case SlotPixelFormat::kP010:
++        // Chromium 109's D3DImageBackingFactory supports NV12, BGRA8, RGBA8;
++        // P010 inputs are converted on-GPU via ID3D11VideoProcessorBlt -> NV12.
++        return DXGI_FORMAT_NV12;
++      case SlotPixelFormat::kBGRA8:
++        return DXGI_FORMAT_B8G8R8A8_UNORM;
++      case SlotPixelFormat::kRGBA8:
++        return DXGI_FORMAT_R8G8B8A8_UNORM;
++    }
++    return DXGI_FORMAT_NV12;
++  }
++
++  static bool ClassifyDxgiFormat(DXGI_FORMAT dxgi_fmt,
++                                 SlotPixelFormat* out_slot_fmt,
++                                 bool* out_direct_copy_ok) {
++    switch (dxgi_fmt) {
++      case DXGI_FORMAT_NV12:
++        *out_slot_fmt = SlotPixelFormat::kNV12;
++        *out_direct_copy_ok = true;
++        return true;
++      case DXGI_FORMAT_B8G8R8A8_UNORM:
++      case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
++      case DXGI_FORMAT_B8G8R8A8_TYPELESS:
++        *out_slot_fmt = SlotPixelFormat::kBGRA8;
++        *out_direct_copy_ok = true;
++        return true;
++      case DXGI_FORMAT_B8G8R8X8_UNORM:
++      case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
++      case DXGI_FORMAT_B8G8R8X8_TYPELESS:
++        *out_slot_fmt = SlotPixelFormat::kBGRA8;
++        *out_direct_copy_ok = false;  // VideoProcessorBlt converts BGRX -> BGRA
++        return true;
++      case DXGI_FORMAT_R8G8B8A8_UNORM:
++      case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
++      case DXGI_FORMAT_R8G8B8A8_TYPELESS:
++        *out_slot_fmt = SlotPixelFormat::kRGBA8;
++        *out_direct_copy_ok = true;
++        return true;
++      case DXGI_FORMAT_P010:
++      case DXGI_FORMAT_P016:
++      case DXGI_FORMAT_YUY2:
++      case DXGI_FORMAT_AYUV:
++        *out_slot_fmt = SlotPixelFormat::kNV12;
++        *out_direct_copy_ok = false;  // VideoProcessorBlt converts -> NV12
++        return true;
++      default:
++        return false;
++    }
++  }
++
++  bool OpenExternalSharedTexture(
++      HANDLE raw_handle,
++      int32_t is_nt_handle,
++      Microsoft::WRL::ComPtr<ID3D11Texture2D>* out_tex,
++      D3D11_TEXTURE2D_DESC* out_desc,
++      bool* out_opened_as_nt) {
++    if (!raw_handle || !IsDeviceHealthy()) {
++      return false;
++    }
++
++    Microsoft::WRL::ComPtr<ID3D11Texture2D> tex;
++    bool opened_nt = false;
++    if (is_nt_handle > 0) {
++      Microsoft::WRL::ComPtr<ID3D11Device1> dev1;
++      if (FAILED(d3d11_device_.As(&dev1)) || !dev1 ||
++          FAILED(dev1->OpenSharedResource1(raw_handle, IID_PPV_ARGS(&tex))) ||
++          !tex) {
++        return false;
++      }
++      opened_nt = true;
++    } else {
++      // Try legacy D3D11_RESOURCE_MISC_SHARED handle first (PlayM4 default),
++      // then fall back to NT handle (MISC_SHARED_NTHANDLE).
++      if (SUCCEEDED(
++              d3d11_device_->OpenSharedResource(raw_handle, IID_PPV_ARGS(&tex))) &&
++          tex) {
++        opened_nt = false;
++      } else {
++        Microsoft::WRL::ComPtr<ID3D11Device1> dev1;
++        if (FAILED(d3d11_device_.As(&dev1)) || !dev1 ||
++            FAILED(dev1->OpenSharedResource1(raw_handle, IID_PPV_ARGS(&tex))) ||
++            !tex) {
++          return false;
++        }
++        opened_nt = true;
++      }
++    }
++
++    D3D11_TEXTURE2D_DESC desc = {};
++    tex->GetDesc(&desc);
++    if (desc.Width == 0 || desc.Height == 0) {
++      return false;
++    }
++    *out_tex = std::move(tex);
++    *out_desc = desc;
++    if (out_opened_as_nt) {
++      *out_opened_as_nt = opened_nt;
++    }
++    return true;
++  }
++
++  bool CreateSharedSlotTexture(
 +      const gfx::Size& coded_size,
++      SlotPixelFormat slot_format,
 +      Microsoft::WRL::ComPtr<ID3D11Texture2D>* out_d3d11_tex,
 +      Microsoft::WRL::ComPtr<ID3D12Resource>* out_d3d12_res,
 +      D3D12_PLACED_SUBRESOURCE_FOOTPRINT out_footprints[2],
@@ -1137,12 +1664,13 @@ index 0000000..8dcab58
 +      return false;
 +    }
 +
++    const DXGI_FORMAT dxgi_fmt = ToSlotDxgiFormat(slot_format);
 +    D3D11_TEXTURE2D_DESC desc = {};
 +    desc.Width = static_cast<UINT>(coded_size.width());
 +    desc.Height = static_cast<UINT>(coded_size.height());
 +    desc.MipLevels = 1;
 +    desc.ArraySize = 1;
-+    desc.Format = DXGI_FORMAT_NV12;
++    desc.Format = dxgi_fmt;
 +    desc.SampleDesc.Count = 1;
 +    desc.SampleDesc.Quality = 0;
 +    desc.Usage = D3D11_USAGE_DEFAULT;
@@ -1172,20 +1700,21 @@ index 0000000..8dcab58
 +    base::win::ScopedHandle scoped_handle(raw_handle);
 +
 +    Microsoft::WRL::ComPtr<ID3D12Resource> tex12;
-+    hr = d3d12_device_->OpenSharedHandle(scoped_handle.Get(),
-+                                         IID_PPV_ARGS(&tex12));
-+    if (FAILED(hr) || !tex12) {
-+      return false;
-+    }
-+
-+    const D3D12_RESOURCE_DESC tex12_desc = tex12->GetDesc();
-+    UINT num_rows[2] = {};
-+    UINT64 row_sizes[2] = {};
 +    UINT64 total_bytes = 0;
-+    d3d12_device_->GetCopyableFootprints(&tex12_desc, 0, 2, 0, out_footprints,
-+                                         num_rows, row_sizes, &total_bytes);
-+    if (total_bytes == 0) {
-+      return false;
++    if (dxgi_fmt == DXGI_FORMAT_NV12) {
++      hr = d3d12_device_->OpenSharedHandle(scoped_handle.Get(),
++                                           IID_PPV_ARGS(&tex12));
++      if (FAILED(hr) || !tex12) {
++        return false;
++      }
++      const D3D12_RESOURCE_DESC tex12_desc = tex12->GetDesc();
++      UINT num_rows[2] = {};
++      UINT64 row_sizes[2] = {};
++      d3d12_device_->GetCopyableFootprints(&tex12_desc, 0, 2, 0, out_footprints,
++                                           num_rows, row_sizes, &total_bytes);
++      if (total_bytes == 0) {
++        return false;
++      }
 +    }
 +
 +    *out_d3d11_tex = std::move(tex11);
@@ -1193,6 +1722,92 @@ index 0000000..8dcab58
 +    *out_total_bytes = total_bytes;
 +    *out_dxgi_handle = std::move(scoped_handle);
 +    return true;
++  }
++
++  bool CreateColdStartCopyInVram(
++      ID3D11Texture2D* src_tex,
++      const D3D11_TEXTURE2D_DESC& src_desc,
++      SlotPixelFormat dst_slot_format,
++      bool direct_copy_ok,
++      uint64_t keyed_acq,
++      uint64_t keyed_rel,
++      Microsoft::WRL::ComPtr<ID3D11Texture2D>* out_temp_tex) {
++    if (!src_tex || !IsDeviceHealthy()) {
++      return false;
++    }
++    D3D11_TEXTURE2D_DESC dst_desc = {};
++    dst_desc.Width = src_desc.Width;
++    dst_desc.Height = src_desc.Height;
++    dst_desc.MipLevels = 1;
++    dst_desc.ArraySize = 1;
++    dst_desc.Format = ToSlotDxgiFormat(dst_slot_format);
++    dst_desc.SampleDesc.Count = 1;
++    dst_desc.Usage = D3D11_USAGE_DEFAULT;
++    dst_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
++
++    Microsoft::WRL::ComPtr<ID3D11Texture2D> temp_tex;
++    if (FAILED(d3d11_device_->CreateTexture2D(&dst_desc, nullptr, &temp_tex)) ||
++        !temp_tex) {
++      return false;
++    }
++    if (!ExecuteD3D11CopyOrBltSync(src_tex, src_desc, temp_tex.Get(), dst_desc,
++                                   direct_copy_ok, keyed_acq, keyed_rel,
++                                   /*wait_until_gpu_done=*/true,
++                                   /*out_signaled_fence=*/nullptr)) {
++      return false;
++    }
++    *out_temp_tex = std::move(temp_tex);
++    return true;
++  }
++
++  UploadStatus SubmitGpuTextureCopy(
++      ID3D11Texture2D* src_tex,
++      const D3D11_TEXTURE2D_DESC& src_desc,
++      Microsoft::WRL::ComPtr<ID3D11Texture2D> dst_slot_tex,
++      SlotPixelFormat dst_slot_format,
++      bool direct_copy_ok,
++      uint64_t keyed_acq,
++      uint64_t keyed_rel,
++      bool wait_until_gpu_done,
++      CompletionCallback on_complete) {
++    if (!src_tex || !dst_slot_tex || !IsDeviceHealthy()) {
++      return UploadStatus::kFatalError;
++    }
++    D3D11_TEXTURE2D_DESC dst_desc = {};
++    dst_slot_tex->GetDesc(&dst_desc);
++    if (dst_desc.Format != ToSlotDxgiFormat(dst_slot_format)) {
++      return UploadStatus::kFatalError;
++    }
++
++    uint64_t signaled_fv = 0;
++    if (!ExecuteD3D11CopyOrBltSync(src_tex, src_desc, dst_slot_tex.Get(),
++                                   dst_desc, direct_copy_ok, keyed_acq,
++                                   keyed_rel, wait_until_gpu_done,
++                                   &signaled_fv)) {
++      return IsDeviceHealthy() ? UploadStatus::kTransientDrop
++                               : UploadStatus::kFatalError;
++    }
++
++    if (signaled_fv == 0) {
++      // Either wait_until_gpu_done already waited for GPU copy completion, or
++      // D3D11->D3D12 shared fence is unavailable.
++      std::move(on_complete).Run(true);
++      return UploadStatus::kSubmitted;
++    }
++
++    {
++      base::AutoLock q_lock(queue_lock_);
++      if (device_failed_.load(std::memory_order_acquire)) {
++        return UploadStatus::kFatalError;
++      }
++      Microsoft::WRL::ComPtr<IUnknown> keep_alive;
++      dst_slot_tex.As(&keep_alive);
++      pending_copies_.push_back({signaled_fv, kInvalidUploadSlot,
++                                 std::move(keep_alive),
++                                 std::move(on_complete)});
++      queue_cv_.Signal();
++    }
++    return UploadStatus::kSubmitted;
 +  }
 +
 +  UploadStatus SubmitAsyncUploadNV12(
@@ -1226,8 +1841,6 @@ index 0000000..8dcab58
 +                               : UploadStatus::kFatalError;
 +    }
 +
-+    // Stream I420/YV12 -> NV12 directly into the persistently mapped D3D12
-+    // UPLOAD heap completely outside any lock.
 +    uint8_t* dst_y = up.cpu_ptr + footprints[0].Offset;
 +    uint8_t* dst_uv = up.cpu_ptr + footprints[1].Offset;
 +    StreamCopyI420ToNV12Planes(
@@ -1235,8 +1848,6 @@ index 0000000..8dcab58
 +        static_cast<int>(footprints[0].Footprint.RowPitch), dst_uv,
 +        static_cast<int>(footprints[1].Footprint.RowPitch));
 +
-+    // Record hardware DMA CopyTextureRegion commands onto this slot's dedicated
-+    // COPY command list (lock-free; slot's prior fence already completed).
 +    if (FAILED(up.cmd_allocator->Reset()) ||
 +        FAILED(up.cmd_list->Reset(up.cmd_allocator.Get(), nullptr))) {
 +      ReturnUploadSlotIndex(upload_idx);
@@ -1269,13 +1880,15 @@ index 0000000..8dcab58
 +      }
 +      ID3D12CommandList* cmd_lists[] = {up.cmd_list.Get()};
 +      copy_queue_->ExecuteCommandLists(1, cmd_lists);
-+      const uint64_t fv = ++next_fence_value_;
++      const uint64_t fv = AllocateFenceValue();
 +      if (FAILED(copy_queue_->Signal(fence_.Get(), fv))) {
 +        MarkDeviceFailed();
 +        return UploadStatus::kFatalError;
 +      }
++      Microsoft::WRL::ComPtr<IUnknown> keep_alive;
++      dst_d3d12_res.As(&keep_alive);
 +      pending_copies_.push_back(
-+          {fv, upload_idx, std::move(dst_d3d12_res), std::move(on_complete)});
++          {fv, upload_idx, std::move(keep_alive), std::move(on_complete)});
 +      queue_cv_.Signal();
 +    }
 +    return UploadStatus::kSubmitted;
@@ -1284,9 +1897,8 @@ index 0000000..8dcab58
 + private:
 +  friend class base::RefCountedThreadSafe<SharedD3D12CopyUploader>;
 +
-+  // Bounded ring of lazily allocated D3D12 UPLOAD buffers (never blocks caller
-+  // threads; excess concurrent bursts drop cleanly in O(1)).
 +  static constexpr size_t kMaxUploadSlots = (sizeof(void*) == 4) ? 12u : 32u;
++  static constexpr size_t kInvalidUploadSlot = static_cast<size_t>(-1);
 +
 +  struct UploadBufferSlot {
 +    UINT64 capacity_bytes = 0;
@@ -1299,18 +1911,31 @@ index 0000000..8dcab58
 +  struct PendingCopy {
 +    uint64_t fence_value;
 +    size_t upload_slot_idx;
-+    Microsoft::WRL::ComPtr<ID3D12Resource> dst_keep_alive;
++    Microsoft::WRL::ComPtr<IUnknown> dst_keep_alive;
 +    CompletionCallback on_complete;
 +  };
 +
-+  SharedD3D12CopyUploader(const CHROME_LUID& luid,
-+                          Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device,
-+                          Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device,
-+                          Microsoft::WRL::ComPtr<ID3D12CommandQueue> copy_queue,
-+                          Microsoft::WRL::ComPtr<ID3D12Fence> fence,
-+                          base::win::ScopedHandle fence_event)
++  SharedD3D12CopyUploader(
++      const CHROME_LUID& luid,
++      Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device,
++      Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11_context,
++      Microsoft::WRL::ComPtr<ID3D11DeviceContext4> d3d11_context4,
++      Microsoft::WRL::ComPtr<ID3D11Fence> d3d11_fence,
++      Microsoft::WRL::ComPtr<ID3D11Fence> d3d11_sync_fence,
++      base::win::ScopedHandle d3d11_sync_event,
++      Microsoft::WRL::ComPtr<ID3D11Query> d3d11_sync_query,
++      Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device,
++      Microsoft::WRL::ComPtr<ID3D12CommandQueue> copy_queue,
++      Microsoft::WRL::ComPtr<ID3D12Fence> fence,
++      base::win::ScopedHandle fence_event)
 +      : luid_(luid),
 +        d3d11_device_(std::move(d3d11_device)),
++        d3d11_context_(std::move(d3d11_context)),
++        d3d11_context4_(std::move(d3d11_context4)),
++        d3d11_fence_(std::move(d3d11_fence)),
++        d3d11_sync_fence_(std::move(d3d11_sync_fence)),
++        d3d11_sync_event_(std::move(d3d11_sync_event)),
++        d3d11_sync_query_(std::move(d3d11_sync_query)),
 +        d3d12_device_(std::move(d3d12_device)),
 +        copy_queue_(std::move(copy_queue)),
 +        fence_(std::move(fence)),
@@ -1330,11 +1955,323 @@ index 0000000..8dcab58
 +    }
 +  }
 +
++  uint64_t AllocateFenceValue() {
++    return next_fence_value_.fetch_add(1, std::memory_order_relaxed) + 1;
++  }
++
++  bool ExecuteD3D11CopyOrBltSync(ID3D11Texture2D* src_tex,
++                                 const D3D11_TEXTURE2D_DESC& src_desc,
++                                 ID3D11Texture2D* dst_tex,
++                                 const D3D11_TEXTURE2D_DESC& dst_desc,
++                                 bool direct_copy_ok,
++                                 uint64_t keyed_acq,
++                                 uint64_t keyed_rel,
++                                 bool wait_until_gpu_done,
++                                 uint64_t* out_signaled_fence) {
++    if (out_signaled_fence) {
++      *out_signaled_fence = 0;
++    }
++
++    Microsoft::WRL::ComPtr<IDXGIKeyedMutex> keyed_mutex;
++    const bool has_keyed_mutex =
++        (src_desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX) != 0 &&
++        SUCCEEDED(src_tex->QueryInterface(IID_PPV_ARGS(&keyed_mutex))) &&
++        keyed_mutex;
++
++    // On WDDM 2.7+ Hardware-Accelerated GPU Scheduling, separate D3D11 devices
++    // sharing a keyless D3D11_RESOURCE_MISC_SHARED texture execute on
++    // independent GPU rings without implicit cross-device ordering. When the
++    // caller relies on copy-on-push (no release_callback and no KeyedMutex),
++    // wait for our VRAM copy to complete (~0.05 ms) before returning so the
++    // caller can safely overwrite or destroy its texture immediately.
++    const bool need_sync_gpu_wait = wait_until_gpu_done && !has_keyed_mutex;
++    uint64_t sync_fv = 0;
++
++    {
++      base::AutoLock ctx_lock(d3d11_ctx_lock_);
++      if (!d3d11_context_ || !IsDeviceHealthy()) {
++        return false;
++      }
++
++      if (has_keyed_mutex) {
++        const HRESULT acq_hr = keyed_mutex->AcquireSync(keyed_acq, 100);
++        if (acq_hr != S_OK) {
++          LOG(WARNING) << "cef_external_video: IDXGIKeyedMutex::AcquireSync("
++                       << keyed_acq << ") failed/timed out: 0x" << std::hex
++                       << acq_hr;
++          return false;
++        }
++      }
++
++      bool copy_ok = false;
++      if (direct_copy_ok && src_desc.ArraySize == 1 &&
++          src_desc.Width == dst_desc.Width &&
++          src_desc.Height == dst_desc.Height) {
++        d3d11_context_->CopyResource(dst_tex, src_tex);
++        copy_ok = true;
++      } else {
++        copy_ok =
++            RunVideoProcessorBltLocked(src_tex, src_desc, dst_tex, dst_desc);
++      }
++
++      if (has_keyed_mutex) {
++        keyed_mutex->ReleaseSync(keyed_rel);
++      }
++
++      if (!copy_ok) {
++        return false;
++      }
++
++      // Many Windows video SDKs (e.g. PlayM4) output BGRA8/RGBA8 textures with
++      // Alpha == 0. Force Alpha = 1.0 (write-masked to the A channel only, so
++      // RGB bits remain untouched) so both Viz DirectComposition and Canvas2D
++      // drawImage() always treat the video frame as opaque.
++      if (dst_desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
++          dst_desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM) {
++        ForceOpaqueAlphaLocked(dst_tex, dst_desc);
++      }
++
++      if (need_sync_gpu_wait) {
++        if (d3d11_context4_ && d3d11_sync_fence_ &&
++            d3d11_sync_event_.IsValid()) {
++          const uint64_t candidate_fv = ++next_d3d11_sync_fv_;
++          if (SUCCEEDED(d3d11_context4_->Signal(d3d11_sync_fence_.Get(),
++                                                candidate_fv))) {
++            sync_fv = candidate_fv;
++          }
++          d3d11_context_->Flush();
++        } else if (d3d11_sync_query_) {
++          d3d11_context_->End(d3d11_sync_query_.Get());
++          d3d11_context_->Flush();
++          BOOL query_done = FALSE;
++          const auto deadline = base::TimeTicks::Now() + base::Milliseconds(200);
++          while (d3d11_context_->GetData(d3d11_sync_query_.Get(), &query_done,
++                                         sizeof(query_done), 0) == S_FALSE) {
++            if (base::TimeTicks::Now() >= deadline || !IsDeviceHealthy()) {
++              break;
++            }
++            ::SwitchToThread();
++          }
++        } else {
++          d3d11_context_->Flush();
++        }
++      } else {
++        if (out_signaled_fence && d3d11_context4_ && d3d11_fence_) {
++          const uint64_t fv = AllocateFenceValue();
++          if (SUCCEEDED(d3d11_context4_->Signal(d3d11_fence_.Get(), fv))) {
++            *out_signaled_fence = fv;
++          }
++        }
++        d3d11_context_->Flush();
++      }
++    }
++
++    if (sync_fv > 0) {
++      base::AutoLock wait_lock(d3d11_sync_wait_lock_);
++      while (!device_failed_.load(std::memory_order_acquire)) {
++        const UINT64 done_val = d3d11_sync_fence_->GetCompletedValue();
++        if (done_val == UINT64_MAX) {
++          MarkDeviceFailed();
++          return false;
++        }
++        if (done_val >= sync_fv) {
++          break;
++        }
++        if (!IsDeviceHealthy() ||
++            FAILED(d3d11_sync_fence_->SetEventOnCompletion(
++                sync_fv, d3d11_sync_event_.Get()))) {
++          MarkDeviceFailed();
++          return false;
++        }
++        ::WaitForSingleObject(d3d11_sync_event_.Get(), 200);
++      }
++    }
++    return IsDeviceHealthy();
++  }
++
++  bool RunVideoProcessorBltLocked(ID3D11Texture2D* src_tex,
++                                  const D3D11_TEXTURE2D_DESC& src_desc,
++                                  ID3D11Texture2D* dst_tex,
++                                  const D3D11_TEXTURE2D_DESC& dst_desc)
++      EXCLUSIVE_LOCKS_REQUIRED(d3d11_ctx_lock_) {
++    if (!video_device_ || !video_context_) {
++      if (FAILED(d3d11_device_.As(&video_device_)) ||
++          FAILED(d3d11_context_.As(&video_context_)) || !video_device_ ||
++          !video_context_) {
++        return false;
++      }
++    }
++
++    if (!vp_enum_ || !video_processor_ || vp_in_w_ != src_desc.Width ||
++        vp_in_h_ != src_desc.Height || vp_out_w_ != dst_desc.Width ||
++        vp_out_h_ != dst_desc.Height) {
++      video_processor_.Reset();
++      vp_enum_.Reset();
++
++      D3D11_VIDEO_PROCESSOR_CONTENT_DESC content_desc = {};
++      content_desc.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
++      content_desc.InputWidth = src_desc.Width;
++      content_desc.InputHeight = src_desc.Height;
++      content_desc.OutputWidth = dst_desc.Width;
++      content_desc.OutputHeight = dst_desc.Height;
++      content_desc.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
++
++      if (FAILED(video_device_->CreateVideoProcessorEnumerator(&content_desc,
++                                                               &vp_enum_)) ||
++          !vp_enum_ ||
++          FAILED(video_device_->CreateVideoProcessor(vp_enum_.Get(), 0,
++                                                     &video_processor_)) ||
++          !video_processor_) {
++        vp_enum_.Reset();
++        video_processor_.Reset();
++        return false;
++      }
++      vp_in_w_ = src_desc.Width;
++      vp_in_h_ = src_desc.Height;
++      vp_out_w_ = dst_desc.Width;
++      vp_out_h_ = dst_desc.Height;
++    }
++
++    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC in_view_desc = {};
++    in_view_desc.FourCC = 0;
++    in_view_desc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
++    in_view_desc.Texture2D.MipSlice = 0;
++    in_view_desc.Texture2D.ArraySlice = 0;
++
++    Microsoft::WRL::ComPtr<ID3D11VideoProcessorInputView> in_view;
++    if (FAILED(video_device_->CreateVideoProcessorInputView(
++            src_tex, vp_enum_.Get(), &in_view_desc, &in_view)) ||
++        !in_view) {
++      return false;
++    }
++
++    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC out_view_desc = {};
++    out_view_desc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
++    out_view_desc.Texture2D.MipSlice = 0;
++
++    Microsoft::WRL::ComPtr<ID3D11VideoProcessorOutputView> out_view;
++    if (FAILED(video_device_->CreateVideoProcessorOutputView(
++            dst_tex, vp_enum_.Get(), &out_view_desc, &out_view)) ||
++        !out_view) {
++      return false;
++    }
++
++    D3D11_VIDEO_PROCESSOR_STREAM stream = {};
++    stream.Enable = TRUE;
++    stream.pInputSurface = in_view.Get();
++    return SUCCEEDED(video_context_->VideoProcessorBlt(
++        video_processor_.Get(), out_view.Get(), 0, 1, &stream));
++  }
++
++  void ForceOpaqueAlphaLocked(ID3D11Texture2D* dst_tex,
++                              const D3D11_TEXTURE2D_DESC& dst_desc)
++      EXCLUSIVE_LOCKS_REQUIRED(d3d11_ctx_lock_) {
++    // Precompiled stripped vs_4_0 / ps_4_0 fullscreen triangle outputting
++    // float4(0, 0, 0, 1) with RenderTargetWriteMask = COLOR_WRITE_ENABLE_ALPHA.
++    alignas(4) static const uint8_t kAlphaFillVS[404] = {
++        68,  88,  66,  67,  204, 26,  106, 34,  49,  3,   239, 240, 157, 159,
++        136, 15,  14,  95,  234, 211, 1,   0,   0,   0,   148, 1,   0,   0,
++        3,   0,   0,   0,   44,  0,   0,   0,   96,  0,   0,   0,   148, 0,
++        0,   0,   73,  83,  71,  78,  44,  0,   0,   0,   1,   0,   0,   0,
++        8,   0,   0,   0,   32,  0,   0,   0,   0,   0,   0,   0,   6,   0,
++        0,   0,   1,   0,   0,   0,   0,   0,   0,   0,   1,   1,   0,   0,
++        83,  86,  95,  86,  101, 114, 116, 101, 120, 73,  68,  0,   79,  83,
++        71,  78,  44,  0,   0,   0,   1,   0,   0,   0,   8,   0,   0,   0,
++        32,  0,   0,   0,   0,   0,   0,   0,   1,   0,   0,   0,   3,   0,
++        0,   0,   0,   0,   0,   0,   15,  0,   0,   0,   83,  86,  95,  80,
++        111, 115, 105, 116, 105, 111, 110, 0,   83,  72,  68,  82,  248, 0,
++        0,   0,   64,  0,   1,   0,   62,  0,   0,   0,   96,  0,   0,   4,
++        18,  16,  16,  0,   0,   0,   0,   0,   6,   0,   0,   0,   103, 0,
++        0,   4,   242, 32,  16,  0,   0,   0,   0,   0,   1,   0,   0,   0,
++        104, 0,   0,   2,   1,   0,   0,   0,   41,  0,   0,   7,   18,  0,
++        16,  0,   0,   0,   0,   0,   10,  16,  16,  0,   0,   0,   0,   0,
++        1,   64,  0,   0,   1,   0,   0,   0,   1,   0,   0,   7,   18,  0,
++        16,  0,   0,   0,   0,   0,   10,  0,   16,  0,   0,   0,   0,   0,
++        1,   64,  0,   0,   2,   0,   0,   0,   1,   0,   0,   7,   66,  0,
++        16,  0,   0,   0,   0,   0,   10,  16,  16,  0,   0,   0,   0,   0,
++        1,   64,  0,   0,   2,   0,   0,   0,   86,  0,   0,   5,   50,  0,
++        16,  0,   0,   0,   0,   0,   134, 0,   16,  0,   0,   0,   0,   0,
++        50,  0,   0,   15,  50,  32,  16,  0,   0,   0,   0,   0,   70,  0,
++        16,  0,   0,   0,   0,   0,   2,   64,  0,   0,   0,   0,   0,   64,
++        0,   0,   0,   192, 0,   0,   0,   0,   0,   0,   0,   0,   2,   64,
++        0,   0,   0,   0,   128, 191, 0,   0,   128, 63,  0,   0,   0,   0,
++        0,   0,   0,   0,   54,  0,   0,   8,   194, 32,  16,  0,   0,   0,
++        0,   0,   2,   64,  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
++        0,   0,   0,   0,   0,   0,   128, 63,  62,  0,   0,   1};
++    alignas(4) static const uint8_t kAlphaFillPS[176] = {
++        68,  88,  66,  67,  201, 62,  226, 70,  6,   89,  205, 57,  52,  196,
++        92,  178, 74,  173, 220, 224, 1,   0,   0,   0,   176, 0,   0,   0,
++        3,   0,   0,   0,   44,  0,   0,   0,   60,  0,   0,   0,   112, 0,
++        0,   0,   73,  83,  71,  78,  8,   0,   0,   0,   0,   0,   0,   0,
++        8,   0,   0,   0,   79,  83,  71,  78,  44,  0,   0,   0,   1,   0,
++        0,   0,   8,   0,   0,   0,   32,  0,   0,   0,   0,   0,   0,   0,
++        0,   0,   0,   0,   3,   0,   0,   0,   0,   0,   0,   0,   15,  0,
++        0,   0,   83,  86,  95,  84,  97,  114, 103, 101, 116, 0,   171, 171,
++        83,  72,  68,  82,  56,  0,   0,   0,   64,  0,   0,   0,   14,  0,
++        0,   0,   101, 0,   0,   3,   242, 32,  16,  0,   0,   0,   0,   0,
++        54,  0,   0,   8,   242, 32,  16,  0,   0,   0,   0,   0,   2,   64,
++        0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
++        0,   0,   128, 63,  62,  0,   0,   1};
++
++    if (!alpha_vs_ || !alpha_ps_ || !alpha_blend_state_ || !alpha_rast_state_) {
++      if (FAILED(d3d11_device_->CreateVertexShader(
++              kAlphaFillVS, sizeof(kAlphaFillVS), nullptr, &alpha_vs_)) ||
++          FAILED(d3d11_device_->CreatePixelShader(
++              kAlphaFillPS, sizeof(kAlphaFillPS), nullptr, &alpha_ps_))) {
++        return;
++      }
++      CD3D11_BLEND_DESC bd(D3D11_DEFAULT);
++      bd.RenderTarget[0].BlendEnable = FALSE;
++      bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALPHA;
++      if (FAILED(d3d11_device_->CreateBlendState(&bd, &alpha_blend_state_))) {
++        return;
++      }
++      CD3D11_RASTERIZER_DESC rd(D3D11_DEFAULT);
++      rd.CullMode = D3D11_CULL_NONE;
++      if (FAILED(
++              d3d11_device_->CreateRasterizerState(&rd, &alpha_rast_state_))) {
++        return;
++      }
++    }
++
++    D3D11_RENDER_TARGET_VIEW_DESC rtv_desc = {};
++    rtv_desc.Format = dst_desc.Format;
++    rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
++    rtv_desc.Texture2D.MipSlice = 0;
++
++    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv;
++    if (FAILED(d3d11_device_->CreateRenderTargetView(dst_tex, &rtv_desc,
++                                                     &rtv)) ||
++        !rtv) {
++      return;
++    }
++
++    D3D11_VIEWPORT vp = {};
++    vp.TopLeftX = 0.0f;
++    vp.TopLeftY = 0.0f;
++    vp.Width = static_cast<FLOAT>(dst_desc.Width);
++    vp.Height = static_cast<FLOAT>(dst_desc.Height);
++    vp.MinDepth = 0.0f;
++    vp.MaxDepth = 1.0f;
++
++    ID3D11RenderTargetView* rtv_ptr = rtv.Get();
++    d3d11_context_->OMSetRenderTargets(1, &rtv_ptr, nullptr);
++    d3d11_context_->OMSetBlendState(alpha_blend_state_.Get(), nullptr,
++                                    0xffffffffu);
++    d3d11_context_->RSSetState(alpha_rast_state_.Get());
++    d3d11_context_->RSSetViewports(1, &vp);
++    d3d11_context_->IASetInputLayout(nullptr);
++    d3d11_context_->IASetPrimitiveTopology(
++        D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
++    d3d11_context_->VSSetShader(alpha_vs_.Get(), nullptr, 0);
++    d3d11_context_->PSSetShader(alpha_ps_.Get(), nullptr, 0);
++    d3d11_context_->Draw(3, 0);
++
++    ID3D11RenderTargetView* null_rtv = nullptr;
++    d3d11_context_->OMSetRenderTargets(1, &null_rtv, nullptr);
++  }
++
 +  void StartWaiterThread() {
-+    // Hold one self-reference while the detached DMA waiter thread is alive.
-+    // On normal process exit it stays parked without racing CRT destructors;
-+    // on GPU device removal it drains |pending_copies_|, releases COM state,
-+    // and calls Release() so defunct uploaders do not leak threads or devices.
 +    AddRef();
 +    std::thread(&SharedD3D12CopyUploader::WaiterThreadMain, this).detach();
 +  }
@@ -1366,7 +2303,6 @@ index 0000000..8dcab58
 +      while (!device_failed_.load(std::memory_order_acquire)) {
 +        const UINT64 done_val = fence_->GetCompletedValue();
 +        if (done_val == UINT64_MAX) {
-+          // D3D12 signals UINT64_MAX when the adapter is removed/reset.
 +          MarkDeviceFailed();
 +          break;
 +        }
@@ -1386,7 +2322,7 @@ index 0000000..8dcab58
 +        ::WaitForSingleObject(fence_event_.Get(), 500);
 +      }
 +
-+      if (completed) {
++      if (completed && item.upload_slot_idx != kInvalidUploadSlot) {
 +        ReturnUploadSlotIndex(item.upload_slot_idx);
 +      }
 +      item.dst_keep_alive.Reset();
@@ -1395,8 +2331,6 @@ index 0000000..8dcab58
 +      }
 +    }
 +
-+    // Device failed and all pending callbacks were drained: release GPU objects
-+    // and drop the waiter thread's self-reference.
 +    for (auto& slot : upload_slots_) {
 +      if (slot.upload_buffer && slot.cpu_ptr) {
 +        slot.upload_buffer->Unmap(0, nullptr);
@@ -1406,6 +2340,22 @@ index 0000000..8dcab58
 +      slot.cmd_list.Reset();
 +      slot.cmd_allocator.Reset();
 +      slot.capacity_bytes = 0;
++    }
++    {
++      base::AutoLock ctx_lock(d3d11_ctx_lock_);
++      alpha_rast_state_.Reset();
++      alpha_blend_state_.Reset();
++      alpha_ps_.Reset();
++      alpha_vs_.Reset();
++      video_processor_.Reset();
++      vp_enum_.Reset();
++      video_context_.Reset();
++      video_device_.Reset();
++      d3d11_sync_query_.Reset();
++      d3d11_sync_fence_.Reset();
++      d3d11_fence_.Reset();
++      d3d11_context4_.Reset();
++      d3d11_context_.Reset();
 +    }
 +    fence_.Reset();
 +    copy_queue_.Reset();
@@ -1478,7 +2428,7 @@ index 0000000..8dcab58
 +    }
 +
 +    void* mapped_ptr = nullptr;
-+    D3D12_RANGE read_range = {0, 0};  // CPU will never read from this buffer.
++    D3D12_RANGE read_range = {0, 0};
 +    if (FAILED(buf->Map(0, &read_range, &mapped_ptr)) || !mapped_ptr) {
 +      return false;
 +    }
@@ -1576,13 +2526,14 @@ index 0000000..8dcab58
 +        D3D_FEATURE_LEVEL_11_0,
 +    };
 +    Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device;
++    Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11_context;
 +    D3D_FEATURE_LEVEL actual_fl = D3D_FEATURE_LEVEL_11_0;
 +    if (FAILED(kD3D11CreateDevice(
 +            chosen_adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr,
 +            D3D11_CREATE_DEVICE_BGRA_SUPPORT, fl11,
 +            static_cast<UINT>(std::size(fl11)), D3D11_SDK_VERSION,
-+            &d3d11_device, &actual_fl, nullptr)) ||
-+        !d3d11_device) {
++            &d3d11_device, &actual_fl, &d3d11_context)) ||
++        !d3d11_device || !d3d11_context) {
 +      return nullptr;
 +    }
 +
@@ -1605,11 +2556,48 @@ index 0000000..8dcab58
 +      return nullptr;
 +    }
 +
++    // Create a shared fence when supported so D3D11 VRAM texture copies can
++    // signal the exact same fence monitored by WaiterThreadMain.
 +    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
-+    if (FAILED(d3d12_device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
-+                                         IID_PPV_ARGS(&fence))) ||
-+        !fence) {
-+      return nullptr;
++    Microsoft::WRL::ComPtr<ID3D11DeviceContext4> d3d11_context4;
++    Microsoft::WRL::ComPtr<ID3D11Fence> d3d11_fence;
++    Microsoft::WRL::ComPtr<ID3D11Fence> d3d11_sync_fence;
++    Microsoft::WRL::ComPtr<ID3D11Device5> dev5;
++    if (SUCCEEDED(d3d11_device.As(&dev5)) &&
++        SUCCEEDED(d3d11_context.As(&d3d11_context4)) && dev5 &&
++        d3d11_context4) {
++      dev5->CreateFence(0, D3D11_FENCE_FLAG_NONE,
++                        IID_PPV_ARGS(&d3d11_sync_fence));
++    }
++    if (SUCCEEDED(d3d12_device->CreateFence(0, D3D12_FENCE_FLAG_SHARED,
++                                            IID_PPV_ARGS(&fence))) &&
++        fence && dev5 && d3d11_context4) {
++      HANDLE raw_fence_handle = nullptr;
++      if (SUCCEEDED(d3d12_device->CreateSharedHandle(
++              fence.Get(), nullptr, GENERIC_ALL, nullptr, &raw_fence_handle)) &&
++          raw_fence_handle) {
++        base::win::ScopedHandle scoped_fence_handle(raw_fence_handle);
++        if (FAILED(dev5->OpenSharedFence(scoped_fence_handle.Get(),
++                                         IID_PPV_ARGS(&d3d11_fence)))) {
++          d3d11_fence.Reset();
++        }
++      }
++    }
++    if (!fence) {
++      if (FAILED(d3d12_device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
++                                           IID_PPV_ARGS(&fence))) ||
++          !fence) {
++        return nullptr;
++      }
++    }
++
++    base::win::ScopedHandle d3d11_sync_event(
++        ::CreateEventW(nullptr, FALSE, FALSE, nullptr));
++    Microsoft::WRL::ComPtr<ID3D11Query> d3d11_sync_query;
++    if (!d3d11_sync_fence || !d3d11_sync_event.IsValid()) {
++      D3D11_QUERY_DESC qd = {};
++      qd.Query = D3D11_QUERY_EVENT;
++      d3d11_device->CreateQuery(&qd, &d3d11_sync_query);
 +    }
 +
 +    base::win::ScopedHandle fence_event(
@@ -1623,18 +2611,20 @@ index 0000000..8dcab58
 +    resolved_luid.HighPart = chosen_desc.AdapterLuid.HighPart;
 +
 +    scoped_refptr<SharedD3D12CopyUploader> uploader(new SharedD3D12CopyUploader(
-+        resolved_luid, std::move(d3d11_device), std::move(d3d12_device),
++        resolved_luid, std::move(d3d11_device), std::move(d3d11_context),
++        std::move(d3d11_context4), std::move(d3d11_fence),
++        std::move(d3d11_sync_fence), std::move(d3d11_sync_event),
++        std::move(d3d11_sync_query), std::move(d3d12_device),
 +        std::move(copy_queue), std::move(fence), std::move(fence_event)));
 +
-+    // Smoke-test D3D11 <-> D3D12 shared NT-handle NV12 interop once up front.
 +    Microsoft::WRL::ComPtr<ID3D11Texture2D> probe11;
 +    Microsoft::WRL::ComPtr<ID3D12Resource> probe12;
 +    D3D12_PLACED_SUBRESOURCE_FOOTPRINT probe_fp[2] = {};
 +    UINT64 probe_bytes = 0;
 +    base::win::ScopedHandle probe_handle;
-+    if (!uploader->CreateSharedNV12Texture(gfx::Size(64, 64), &probe11,
-+                                           &probe12, probe_fp, &probe_bytes,
-+                                           &probe_handle)) {
++    if (!uploader->CreateSharedSlotTexture(
++            gfx::Size(64, 64), SlotPixelFormat::kNV12, &probe11, &probe12,
++            probe_fp, &probe_bytes, &probe_handle)) {
 +      return nullptr;
 +    }
 +
@@ -1644,25 +2634,56 @@ index 0000000..8dcab58
 +
 +  const CHROME_LUID luid_;
 +  Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device_;
++  base::Lock d3d11_ctx_lock_;
++  Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11_context_;
++  Microsoft::WRL::ComPtr<ID3D11DeviceContext4> d3d11_context4_;
++  Microsoft::WRL::ComPtr<ID3D11Fence> d3d11_fence_;
++  Microsoft::WRL::ComPtr<ID3D11Fence> d3d11_sync_fence_;
++  base::Lock d3d11_sync_wait_lock_;
++  base::win::ScopedHandle d3d11_sync_event_;
++  Microsoft::WRL::ComPtr<ID3D11Query> d3d11_sync_query_
++      GUARDED_BY(d3d11_ctx_lock_);
++  uint64_t next_d3d11_sync_fv_ GUARDED_BY(d3d11_ctx_lock_) = 0;
++  Microsoft::WRL::ComPtr<ID3D11VideoDevice> video_device_
++      GUARDED_BY(d3d11_ctx_lock_);
++  Microsoft::WRL::ComPtr<ID3D11VideoContext> video_context_
++      GUARDED_BY(d3d11_ctx_lock_);
++  Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator> vp_enum_
++      GUARDED_BY(d3d11_ctx_lock_);
++  Microsoft::WRL::ComPtr<ID3D11VideoProcessor> video_processor_
++      GUARDED_BY(d3d11_ctx_lock_);
++  Microsoft::WRL::ComPtr<ID3D11VertexShader> alpha_vs_
++      GUARDED_BY(d3d11_ctx_lock_);
++  Microsoft::WRL::ComPtr<ID3D11PixelShader> alpha_ps_
++      GUARDED_BY(d3d11_ctx_lock_);
++  Microsoft::WRL::ComPtr<ID3D11BlendState> alpha_blend_state_
++      GUARDED_BY(d3d11_ctx_lock_);
++  Microsoft::WRL::ComPtr<ID3D11RasterizerState> alpha_rast_state_
++      GUARDED_BY(d3d11_ctx_lock_);
++  UINT vp_in_w_ GUARDED_BY(d3d11_ctx_lock_) = 0;
++  UINT vp_in_h_ GUARDED_BY(d3d11_ctx_lock_) = 0;
++  UINT vp_out_w_ GUARDED_BY(d3d11_ctx_lock_) = 0;
++  UINT vp_out_h_ GUARDED_BY(d3d11_ctx_lock_) = 0;
++
 +  Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device_;
 +  Microsoft::WRL::ComPtr<ID3D12CommandQueue> copy_queue_;
 +  Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
 +  base::win::ScopedHandle fence_event_;
 +
 +  std::atomic<bool> device_failed_{false};
++  std::atomic<uint64_t> next_fence_value_{0};
 +  UploadBufferSlot upload_slots_[kMaxUploadSlots];
 +  base::Lock pool_lock_;
 +  std::deque<size_t> free_upload_indices_ GUARDED_BY(pool_lock_);
 +
 +  base::Lock queue_lock_;
 +  base::ConditionVariable queue_cv_;
-+  uint64_t next_fence_value_ GUARDED_BY(queue_lock_) = 0;
 +  std::deque<PendingCopy> pending_copies_ GUARDED_BY(queue_lock_);
 +};
 +#endif  // BUILDFLAG(IS_WIN)
 +
 +// ---------------------------------------------------------------------------
-+// Slot structures
++// Slot & GPU payload structures
 +// ---------------------------------------------------------------------------
 +
 +struct ExternalVideoSource::SharedBufferSlot
@@ -1678,28 +2699,53 @@ index 0000000..8dcab58
 +  ~SharedBufferSlot() = default;
 +};
 +
++struct ExternalVideoSource::ImportedCacheKey {
++  uint64_t surface_key = 0;
++  gfx::Size coded_size;
++  SlotPixelFormat format = SlotPixelFormat::kNV12;
++
++  bool operator==(const ImportedCacheKey& o) const {
++    return surface_key == o.surface_key && coded_size == o.coded_size &&
++           format == o.format;
++  }
++};
++
 +struct ExternalVideoSource::TextureSlot
 +    : public base::RefCountedThreadSafe<ExternalVideoSource::TextureSlot> {
 +  TextureSlot(int32_t id,
 +              const gfx::Size& size,
++              SlotPixelFormat fmt,
 +              uint32_t target,
-+              bool overlay_capable)
++              bool overlay_capable,
++              bool imported = false,
++              bool lru_cached = false)
 +      : buffer_id(id),
 +        coded_size(size),
++        slot_format(fmt),
 +        texture_target(target),
-+        allow_overlay(overlay_capable) {}
++        allow_overlay(overlay_capable),
++        is_imported(imported),
++        cache_in_lru(lru_cached) {}
 +
 +  const int32_t buffer_id;
 +  const gfx::Size coded_size;
++  const SlotPixelFormat slot_format;
 +  const uint32_t texture_target;
 +  const bool allow_overlay;
++  const bool is_imported;
++  const bool cache_in_lru;
++
++  ImportedCacheKey import_key;
++  bool in_use_by_consumer = false;
++
 +  gpu::Mailbox mailbox_y;
 +  gpu::Mailbox mailbox_uv;
 +
-+  // Guarded by ExternalVideoSource::lock_ while the slot is tracked in the pool.
++  // Guarded by ExternalVideoSource::lock_ while tracked in |in_flight_texture_slots_|.
 +  uint64_t submit_seq = 0;
 +  base::TimeTicks in_flight_since;
 +  bool dma_in_progress = false;
++  ScopedGpuReleaseRunner release_runner;
 +
 +#if BUILDFLAG(IS_WIN)
 +  scoped_refptr<SharedD3D12CopyUploader> uploader;
@@ -1710,11 +2756,52 @@ index 0000000..8dcab58
 +  std::unique_ptr<gpu::GpuMemoryBufferImplDXGI> gmb_dxgi;
 +#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 +  std::unique_ptr<gfx::GpuMemoryBuffer> gmb;
++#elif BUILDFLAG(IS_MAC)
++  gfx::ScopedIOSurface io_surface;
++  std::unique_ptr<gpu::GpuMemoryBufferImplIOSurface> gmb_iosurface;
 +#endif
 +
 + private:
 +  friend class base::RefCountedThreadSafe<TextureSlot>;
 +  ~TextureSlot() = default;
++};
++
++struct ExternalVideoSource::ImportedGpuPayload {
++  SlotPixelFormat slot_format = SlotPixelFormat::kNV12;
++  gfx::Size coded_size;
++  gfx::Rect visible_rect;
++  int64_t timestamp_us = 0;
++  base::TimeTicks reference_time;
++  gfx::ColorSpace color_space;
++  uint64_t surface_key = 0;
++  ScopedGpuReleaseRunner release_runner;
++
++#if BUILDFLAG(IS_WIN)
++  base::win::ScopedHandle dxgi_nt_handle;
++#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++  gfx::NativePixmapHandle native_pixmap_handle;
++  base::ScopedFD sync_fence_fd;
++#elif BUILDFLAG(IS_MAC)
++  gfx::ScopedIOSurface io_surface;
++#endif
++};
++
++struct ExternalVideoSource::ColdStartGpuFrame {
++  SlotPixelFormat slot_format = SlotPixelFormat::kNV12;
++  gfx::Size coded_size;
++  gfx::Rect visible_rect;
++  int64_t timestamp_us = 0;
++  base::TimeTicks reference_time;
++  gfx::ColorSpace color_space;
++  ScopedGpuReleaseRunner release_runner;
++  std::unique_ptr<ImportedGpuPayload> imported_payload;
++
++#if BUILDFLAG(IS_WIN)
++  Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_temp_tex;
++  D3D11_TEXTURE2D_DESC d3d11_temp_desc = {};
++#elif BUILDFLAG(IS_MAC)
++  gfx::ScopedIOSurface io_surface_copy;
++#endif
 +};
 +
 +// ---------------------------------------------------------------------------
@@ -1737,7 +2824,6 @@ index 0000000..8dcab58
 +    if (transfer == VCS::TransferID::INVALID)
 +      transfer = VCS::TransferID::UNSPECIFIED;
 +    matrix = VCS::GetMatrixID(color->matrix);
-+    // Identity (RGB) makes no sense for YUV input.
 +    if (matrix == VCS::MatrixID::INVALID || matrix == VCS::MatrixID::RGB)
 +      matrix = VCS::MatrixID::UNSPECIFIED;
 +    if (color->range == CEF_EXTERNAL_VIDEO_RANGE_FULL)
@@ -1748,7 +2834,6 @@ index 0000000..8dcab58
 +  if (primaries == VCS::PrimaryID::UNSPECIFIED &&
 +      transfer == VCS::TransferID::UNSPECIFIED &&
 +      matrix == VCS::MatrixID::UNSPECIFIED) {
-+    // Nothing signaled: same heuristic as FFmpeg and most players.
 +    primaries = hd ? VCS::PrimaryID::BT709 : VCS::PrimaryID::SMPTE170M;
 +    transfer = hd ? VCS::TransferID::BT709 : VCS::TransferID::SMPTE170M;
 +    matrix = hd ? VCS::MatrixID::BT709 : VCS::MatrixID::SMPTE170M;
@@ -1832,7 +2917,8 @@ index 0000000..8dcab58
 +  content::GetVideoCaptureService().ConnectToVideoSourceProvider(
 +      provider.InitWithNewPipeAndPassReceiver());
 +
-+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
++    BUILDFLAG(IS_MAC)
 +  auto* gpu_data_mgr = content::GpuDataManagerImpl::GetInstance();
 +  auto* gpu_factory = content::BrowserGpuChannelHostFactory::instance();
 +  if (gpu_data_mgr && gpu_factory &&
@@ -1918,6 +3004,7 @@ index 0000000..8dcab58
 +    }
 +
 +    desired_coded_size_ = coded_size;
++    desired_pool_format_ = SlotPixelFormat::kNV12;
 +    desired_color_space_ = color_space;
 +
 +    switch (mode_) {
@@ -1930,7 +3017,8 @@ index 0000000..8dcab58
 +      }
 +
 +      case BackendMode::kTexture: {
-+        if (texture_pool_coded_size_ == coded_size) {
++        if (texture_pool_coded_size_ == coded_size &&
++            texture_pool_format_ == SlotPixelFormat::kNV12) {
 +          if (device_ready_ && !texture_alloc_in_flight_ &&
 +              !reclaim_in_flight_ && HasStaleInFlightSlotLocked(now_ticks)) {
 +            reclaim_in_flight_ = true;
@@ -1944,8 +3032,6 @@ index 0000000..8dcab58
 +            tex_slot->dma_in_progress = true;
 +            in_flight_texture_slots_[tex_slot->buffer_id] = tex_slot;
 +          } else {
-+            // All 3 GPU texture slots are currently in flight: drop in O(1) at
-+            // entry without touching CPU or PCIe bandwidth.
 +            drop_after_lock = true;
 +          }
 +        } else {
@@ -2006,9 +3092,7 @@ index 0000000..8dcab58
 +  }
 +
 +  if (tex_slot) {
-+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 +    const gfx::Rect visible_rect(width, height);
-+#endif
 +#if BUILDFLAG(IS_WIN)
 +    const int32_t buf_id = tex_slot->buffer_id;
 +    const gfx::Size slot_size = tex_slot->coded_size;
@@ -2022,7 +3106,7 @@ index 0000000..8dcab58
 +                FROM_HERE,
 +                base::BindOnce(
 +                    &ExternalVideoSource::SubmitTextureFrameOnSequence, src, id,
-+                    sz, vis_rect, ts_us, rt, cs));
++                    SlotPixelFormat::kNV12, sz, vis_rect, ts_us, rt, cs));
 +          } else {
 +            src->task_runner_->PostTask(
 +                FROM_HERE,
@@ -2080,8 +3164,45 @@ index 0000000..8dcab58
 +        FROM_HERE,
 +        base::BindOnce(&ExternalVideoSource::SubmitTextureFrameOnSequence,
 +                       base::WrapRefCounted(this), tex_slot->buffer_id,
-+                       tex_slot->coded_size, visible_rect, timestamp_us,
-+                       now_ticks, color_space));
++                       SlotPixelFormat::kNV12, tex_slot->coded_size,
++                       visible_rect, timestamp_us, now_ticks, color_space));
++    return true;
++#elif BUILDFLAG(IS_MAC)
++    bool ok = false;
++    if (tex_slot->io_surface &&
++        IOSurfaceLock(tex_slot->io_surface, 0, nullptr) == kIOReturnSuccess) {
++      uint8_t* dst_y = static_cast<uint8_t*>(
++          IOSurfaceGetBaseAddressOfPlane(tex_slot->io_surface, 0));
++      uint8_t* dst_uv = static_cast<uint8_t*>(
++          IOSurfaceGetBaseAddressOfPlane(tex_slot->io_surface, 1));
++      const int stride_y = static_cast<int>(
++          IOSurfaceGetBytesPerRowOfPlane(tex_slot->io_surface, 0));
++      const int stride_uv = static_cast<int>(
++          IOSurfaceGetBytesPerRowOfPlane(tex_slot->io_surface, 1));
++      if (dst_y && dst_uv && stride_y >= tex_slot->coded_size.width() &&
++          stride_uv >= tex_slot->coded_size.width()) {
++        StreamCopyI420ToNV12Planes(y, y_stride, u, u_stride, v, v_stride, width,
++                                   height, tex_slot->coded_size, dst_y,
++                                   stride_y, dst_uv, stride_uv);
++        ok = true;
++      }
++      IOSurfaceUnlock(tex_slot->io_surface, 0, nullptr);
++    }
++    if (!ok) {
++      task_runner_->PostTask(
++          FROM_HERE,
++          base::BindOnce(
++              &ExternalVideoSource::HandleTextureUploadFailureOnSequence,
++              base::WrapRefCounted(this), tex_slot->buffer_id,
++              "macOS IOSurface Lock/copy failed"));
++      return true;
++    }
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ExternalVideoSource::SubmitTextureFrameOnSequence,
++                       base::WrapRefCounted(this), tex_slot->buffer_id,
++                       SlotPixelFormat::kNV12, tex_slot->coded_size,
++                       visible_rect, timestamp_us, now_ticks, color_space));
 +    return true;
 +#else
 +    return false;
@@ -2151,10 +3272,12 @@ index 0000000..8dcab58
 +      }
 +      if (!has_completed_initial_setup_) {
 +        cold_start_frame_ = std::move(frame);
++        cold_start_gpu_frame_.reset();
 +      }
 +      if (device_ready_) {
 +        if (mode_ == BackendMode::kTexture && !texture_alloc_in_flight_ &&
-+            texture_pool_coded_size_ != desired_coded_size_) {
++            (texture_pool_coded_size_ != desired_coded_size_ ||
++             texture_pool_format_ != desired_pool_format_)) {
 +          texture_alloc_in_flight_ = true;
 +          post_texture_alloc = true;
 +        } else if (mode_ == BackendMode::kSharedMemory && !reserve_in_flight_ &&
@@ -2181,16 +3304,759 @@ index 0000000..8dcab58
 +  return true;
 +}
 +
++// ---------------------------------------------------------------------------
++// Cross-platform GPU Surface Push (Windows D3D11 / Linux DMA-BUF / macOS IOSurface)
++// ---------------------------------------------------------------------------
++
++bool ExternalVideoSource::PushGpuFrame(
++    const cef_external_video_gpu_frame_t& frame) {
++  if (frame.struct_size < sizeof(cef_external_video_gpu_frame_t)) {
++    return false;
++  }
++
++  const base::TimeTicks now_ticks = base::TimeTicks::Now();
++
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_ || mode_ == BackendMode::kSharedMemory) {
++      return false;
++    }
++  }
++
++#if BUILDFLAG(IS_WIN)
++  if (frame.handle_type != CEF_EXT_GPU_HANDLE_WIN_D3D11 ||
++      !frame.handle.win_d3d11.shared_handle) {
++    return false;
++  }
++
++  scoped_refptr<SharedD3D12CopyUploader> uploader;
++  {
++    base::AutoLock lock(lock_);
++    uploader = d3d12_uploader_shared_;
++  }
++  if (!uploader) {
++    uploader = SharedD3D12CopyUploader::GetOrCreate(QueryCurrentActiveGpuLuid());
++    if (!uploader) {
++      return false;
++    }
++  }
++
++  const HANDLE raw_handle =
++      static_cast<HANDLE>(frame.handle.win_d3d11.shared_handle);
++  Microsoft::WRL::ComPtr<ID3D11Texture2D> src_tex;
++  D3D11_TEXTURE2D_DESC src_desc = {};
++  bool opened_as_nt = false;
++  if (!uploader->OpenExternalSharedTexture(raw_handle,
++                                           frame.handle.win_d3d11.is_nt_handle,
++                                           &src_tex, &src_desc, &opened_as_nt)) {
++    return false;
++  }
++
++  SlotPixelFormat detected_slot_fmt = SlotPixelFormat::kNV12;
++  bool direct_copy_ok = false;
++  if (!SharedD3D12CopyUploader::ClassifyDxgiFormat(
++          src_desc.Format, &detected_slot_fmt, &direct_copy_ok)) {
++    return false;
++  }
++
++  SlotPixelFormat slot_fmt = detected_slot_fmt;
++  if (frame.format != CEF_EXT_GPU_FORMAT_AUTO) {
++    SlotPixelFormat explicit_fmt = SlotPixelFormat::kNV12;
++    if (!FromCefGpuFormat(frame.format, &explicit_fmt)) {
++      return false;
++    }
++    // On Windows Chromium 109, P010 converts on-GPU to NV12 slot.
++    slot_fmt = (explicit_fmt == SlotPixelFormat::kP010) ? SlotPixelFormat::kNV12
++                                                        : explicit_fmt;
++    if (SharedD3D12CopyUploader::ToSlotDxgiFormat(slot_fmt) != src_desc.Format) {
++      direct_copy_ok = false;
++    }
++  }
++
++  const int coded_w = (frame.coded_width == 0)
++                          ? static_cast<int>(src_desc.Width)
++                          : frame.coded_width;
++  const int coded_h = (frame.coded_height == 0)
++                          ? static_cast<int>(src_desc.Height)
++                          : frame.coded_height;
++  if (coded_w != static_cast<int>(src_desc.Width) ||
++      coded_h != static_cast<int>(src_desc.Height)) {
++    return false;
++  }
++  const gfx::Size coded_size(coded_w, coded_h);
++  gfx::Rect visible_rect;
++  if (!ComputeAndValidateVisibleRect(frame, coded_size, max_size_, slot_fmt,
++                                     &visible_rect)) {
++    return false;
++  }
++
++  const gfx::ColorSpace color_space =
++      ResolveGpuFrameColorSpace(frame.color, visible_rect.height(), slot_fmt);
++
++  ScopedGpuReleaseRunner release_runner(frame.release_callback,
++                                        frame.release_ctx);
++
++  // Zero-copy borrow fast path when caller supplies a release callback and an
++  // NT-handle single-slice texture without non-zero KeyedMutex keys.
++  const bool can_zero_copy_nt =
++      release_runner.HasCallback() && opened_as_nt && direct_copy_ok &&
++      src_desc.ArraySize == 1 &&
++      ((src_desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX) == 0 ||
++       (frame.handle.win_d3d11.keyed_mutex_acq == 0 &&
++        frame.handle.win_d3d11.keyed_mutex_rel == 0));
++
++  if (can_zero_copy_nt) {
++    HANDLE dup_handle = nullptr;
++    if (::DuplicateHandle(::GetCurrentProcess(), raw_handle,
++                          ::GetCurrentProcess(), &dup_handle, 0, FALSE,
++                          DUPLICATE_SAME_ACCESS) &&
++        dup_handle) {
++      auto payload = std::make_unique<ImportedGpuPayload>();
++      payload->slot_format = slot_fmt;
++      payload->coded_size = coded_size;
++      payload->visible_rect = visible_rect;
++      payload->timestamp_us = frame.timestamp_us;
++      payload->reference_time = now_ticks;
++      payload->color_space = color_space;
++      payload->surface_key =
++          frame.surface_key != 0
++              ? frame.surface_key
++              : static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_handle));
++      payload->dxgi_nt_handle.Set(dup_handle);
++      payload->release_runner = std::move(release_runner);
++
++      {
++        base::AutoLock lock(lock_);
++        if (shut_down_ || mode_ == BackendMode::kSharedMemory) {
++          payload->release_runner.Disarm();
++          return false;
++        }
++        if (mode_ == BackendMode::kPendingInit) {
++          auto cold = std::make_unique<ColdStartGpuFrame>();
++          cold->imported_payload = std::move(payload);
++          cold_start_gpu_frame_ = std::move(cold);
++          cold_start_frame_ = nullptr;
++          return true;
++        }
++      }
++
++      task_runner_->PostTask(
++          FROM_HERE,
++          base::BindOnce(&ExternalVideoSource::SubmitImportedGpuFrameOnSequence,
++                         base::WrapRefCounted(this), std::move(payload)));
++      return true;
++    }
++  }
++
++  // Copy-on-push in VRAM (default for PlayM4 & legacy MISC_SHARED handles).
++  scoped_refptr<TextureSlot> tex_slot;
++  bool need_cold_vram_copy = false;
++  bool post_texture_alloc = false;
++  bool post_reclaim_stale = false;
++  bool drop_after_lock = false;
++
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_ || mode_ == BackendMode::kSharedMemory) {
++      release_runner.Disarm();
++      return false;
++    }
++
++    desired_coded_size_ = coded_size;
++    desired_pool_format_ = slot_fmt;
++    desired_color_space_ = color_space;
++
++    if (mode_ == BackendMode::kPendingInit) {
++      need_cold_vram_copy = true;
++    } else if (texture_pool_coded_size_ == coded_size &&
++               texture_pool_format_ == slot_fmt) {
++      if (device_ready_ && !texture_alloc_in_flight_ && !reclaim_in_flight_ &&
++          HasStaleInFlightSlotLocked(now_ticks)) {
++        reclaim_in_flight_ = true;
++        post_reclaim_stale = true;
++      }
++      if (!free_texture_slots_.empty()) {
++        tex_slot = std::move(free_texture_slots_.front());
++        free_texture_slots_.pop_front();
++        tex_slot->submit_seq = ++next_submit_seq_;
++        tex_slot->in_flight_since = now_ticks;
++        tex_slot->dma_in_progress = true;
++        in_flight_texture_slots_[tex_slot->buffer_id] = tex_slot;
++      } else {
++        drop_after_lock = true;
++      }
++    } else {
++      if (!has_completed_initial_setup_) {
++        need_cold_vram_copy = true;
++      }
++      if (device_ready_ && !texture_alloc_in_flight_) {
++        texture_alloc_in_flight_ = true;
++        post_texture_alloc = true;
++      }
++    }
++  }
++
++  if (post_reclaim_stale) {
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ExternalVideoSource::ReclaimStaleTextureSlotsOnSequence,
++                       base::WrapRefCounted(this)));
++  }
++
++  if (drop_after_lock) {
++    // Frame accepted & intentionally dropped due to downstream backpressure;
++    // release_runner destructor runs release_callback (if any) right now.
++    return true;
++  }
++
++  if (tex_slot) {
++    const int32_t buf_id = tex_slot->buffer_id;
++    const gfx::Size slot_size = tex_slot->coded_size;
++    const bool wait_until_gpu_done = !release_runner.HasCallback();
++    scoped_refptr<ExternalVideoSource> self = base::WrapRefCounted(this);
++    auto on_copy_done = base::BindOnce(
++        [](scoped_refptr<ExternalVideoSource> src, int32_t id,
++           SlotPixelFormat sfmt, gfx::Size sz, gfx::Rect vis_rect,
++           int64_t ts_us, base::TimeTicks rt, gfx::ColorSpace cs,
++           ScopedGpuReleaseRunner rel, bool ok) mutable {
++          // Source texture copy finished on GPU; release external reference now!
++          rel.RunNow();
++          if (ok) {
++            src->task_runner_->PostTask(
++                FROM_HERE,
++                base::BindOnce(
++                    &ExternalVideoSource::SubmitTextureFrameOnSequence, src, id,
++                    sfmt, sz, vis_rect, ts_us, rt, cs));
++          } else {
++            src->ReturnTransientDroppedSlot(id);
++          }
++        },
++        self, buf_id, slot_fmt, slot_size, visible_rect, frame.timestamp_us,
++        now_ticks, color_space, std::move(release_runner));
++
++    const auto status =
++        tex_slot->uploader
++            ? tex_slot->uploader->SubmitGpuTextureCopy(
++                  src_tex.Get(), src_desc, tex_slot->d3d11_texture, slot_fmt,
++                  direct_copy_ok, frame.handle.win_d3d11.keyed_mutex_acq,
++                  frame.handle.win_d3d11.keyed_mutex_rel, wait_until_gpu_done,
++                  std::move(on_copy_done))
++            : SharedD3D12CopyUploader::UploadStatus::kFatalError;
++    if (status != SharedD3D12CopyUploader::UploadStatus::kSubmitted) {
++      ReturnTransientDroppedSlot(buf_id);
++      return status == SharedD3D12CopyUploader::UploadStatus::kTransientDrop;
++    }
++    return true;
++  }
++
++  if (need_cold_vram_copy) {
++    Microsoft::WRL::ComPtr<ID3D11Texture2D> temp_tex;
++    if (uploader->CreateColdStartCopyInVram(
++            src_tex.Get(), src_desc, slot_fmt, direct_copy_ok,
++            frame.handle.win_d3d11.keyed_mutex_acq,
++            frame.handle.win_d3d11.keyed_mutex_rel, &temp_tex) &&
++        temp_tex) {
++      release_runner.RunNow();
++      auto cold = std::make_unique<ColdStartGpuFrame>();
++      cold->slot_format = slot_fmt;
++      cold->coded_size = coded_size;
++      cold->visible_rect = visible_rect;
++      cold->timestamp_us = frame.timestamp_us;
++      cold->reference_time = now_ticks;
++      cold->color_space = color_space;
++      cold->d3d11_temp_tex = std::move(temp_tex);
++      cold->d3d11_temp_tex->GetDesc(&cold->d3d11_temp_desc);
++
++      base::AutoLock lock(lock_);
++      if (!shut_down_ && !has_completed_initial_setup_) {
++        cold_start_gpu_frame_ = std::move(cold);
++        cold_start_frame_ = nullptr;
++      }
++      if (device_ready_ && mode_ == BackendMode::kTexture &&
++          !texture_alloc_in_flight_ &&
++          (texture_pool_coded_size_ != desired_coded_size_ ||
++           texture_pool_format_ != desired_pool_format_)) {
++        texture_alloc_in_flight_ = true;
++        post_texture_alloc = true;
++      }
++    }
++  }
++
++  if (post_texture_alloc) {
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ExternalVideoSource::EnsureTexturePoolOnSequence,
++                       base::WrapRefCounted(this)));
++  }
++  return true;
++
++#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++  if (frame.handle_type != CEF_EXT_GPU_HANDLE_LINUX_DMABUF) {
++    return false;
++  }
++  SlotPixelFormat slot_fmt = SlotPixelFormat::kNV12;
++  if (!FromCefGpuFormat(frame.format, &slot_fmt)) {
++    return false;
++  }
++
++  const int expected_planes = IsBiplanarSlotFormat(slot_fmt) ? 2 : 1;
++  const int plane_count = frame.handle.linux_dmabuf.plane_count;
++  if (plane_count < expected_planes || plane_count > 4 ||
++      frame.handle.linux_dmabuf.fds[0] < 0) {
++    return false;
++  }
++
++  const gfx::Size coded_size(frame.coded_width, frame.coded_height);
++  gfx::Rect visible_rect;
++  if (!ComputeAndValidateVisibleRect(frame, coded_size, max_size_, slot_fmt,
++                                     &visible_rect)) {
++    return false;
++  }
++
++  const gfx::ColorSpace color_space =
++      ResolveGpuFrameColorSpace(frame.color, visible_rect.height(), slot_fmt);
++  ScopedGpuReleaseRunner release_runner(frame.release_callback,
++                                        frame.release_ctx);
++
++  // Copy-on-push fast path for linear CPU-mappable DMA-BUF when no
++  // release_callback is supplied and a matching pool slot is ready.
++  const uint64_t mod = frame.handle.linux_dmabuf.drm_modifier;
++  if (!release_runner.HasCallback() && mod == 0 &&
++      slot_fmt != SlotPixelFormat::kP010) {
++    scoped_refptr<TextureSlot> tex_slot;
++    bool post_alloc = false;
++    {
++      base::AutoLock lock(lock_);
++      if (shut_down_ || mode_ == BackendMode::kSharedMemory) {
++        return false;
++      }
++      desired_coded_size_ = coded_size;
++      desired_pool_format_ = slot_fmt;
++      desired_color_space_ = color_space;
++      if (mode_ == BackendMode::kTexture &&
++          texture_pool_coded_size_ == coded_size &&
++          texture_pool_format_ == slot_fmt && !free_texture_slots_.empty()) {
++        tex_slot = std::move(free_texture_slots_.front());
++        free_texture_slots_.pop_front();
++        tex_slot->submit_seq = ++next_submit_seq_;
++        tex_slot->in_flight_since = now_ticks;
++        tex_slot->dma_in_progress = true;
++        in_flight_texture_slots_[tex_slot->buffer_id] = tex_slot;
++      } else if (device_ready_ && mode_ == BackendMode::kTexture &&
++                 !texture_alloc_in_flight_ &&
++                 (texture_pool_coded_size_ != coded_size ||
++                  texture_pool_format_ != slot_fmt)) {
++        texture_alloc_in_flight_ = true;
++        post_alloc = true;
++      }
++    }
++    if (post_alloc) {
++      task_runner_->PostTask(
++          FROM_HERE,
++          base::BindOnce(&ExternalVideoSource::EnsureTexturePoolOnSequence,
++                         base::WrapRefCounted(this)));
++    }
++    if (tex_slot) {
++      bool copied = false;
++      if (tex_slot->gmb && tex_slot->gmb->Map()) {
++        copied = true;
++        const long page_sz = sysconf(_SC_PAGESIZE);
++        const size_t page_mask =
++            page_sz > 0 ? static_cast<size_t>(page_sz - 1) : 4095u;
++        for (int p = 0; p < expected_planes; ++p) {
++          const int fd = frame.handle.linux_dmabuf.fds[p] >= 0
++                             ? frame.handle.linux_dmabuf.fds[p]
++                             : frame.handle.linux_dmabuf.fds[0];
++          const int rows =
++              (p == 0) ? coded_size.height() : (coded_size.height() / 2);
++          const size_t row_bytes =
++              IsBiplanarSlotFormat(slot_fmt)
++                  ? static_cast<size_t>(coded_size.width())
++                  : static_cast<size_t>(coded_size.width()) * 4u;
++          const size_t src_stride = frame.handle.linux_dmabuf.strides[p];
++          const size_t src_offset = frame.handle.linux_dmabuf.offsets[p];
++          if (src_stride < row_bytes || rows <= 0) {
++            copied = false;
++            break;
++          }
++          const size_t need_len =
++              src_stride * static_cast<size_t>(rows - 1) + row_bytes;
++          const size_t aligned_off = src_offset & ~page_mask;
++          const size_t delta = src_offset - aligned_off;
++          void* map_ptr = mmap(nullptr, delta + need_len, PROT_READ, MAP_SHARED,
++                               fd, static_cast<off_t>(aligned_off));
++          if (map_ptr == MAP_FAILED) {
++            copied = false;
++            break;
++          }
++          uint8_t* dst_plane =
++              static_cast<uint8_t*>(tex_slot->gmb->memory(static_cast<size_t>(p)));
++          if (dst_plane) {
++            StreamCopyRawRows(static_cast<const uint8_t*>(map_ptr) + delta,
++                              static_cast<int>(src_stride), dst_plane,
++                              tex_slot->gmb->stride(static_cast<size_t>(p)),
++                              row_bytes, rows);
++          } else {
++            copied = false;
++          }
++          munmap(map_ptr, delta + need_len);
++          if (!copied) {
++            break;
++          }
++        }
++        StreamStoreFence();
++        tex_slot->gmb->Unmap();
++      }
++      if (copied) {
++        task_runner_->PostTask(
++            FROM_HERE,
++            base::BindOnce(&ExternalVideoSource::SubmitTextureFrameOnSequence,
++                           base::WrapRefCounted(this), tex_slot->buffer_id,
++                           slot_fmt, coded_size, visible_rect,
++                           frame.timestamp_us, now_ticks, color_space));
++        return true;
++      }
++      ReturnTransientDroppedSlot(tex_slot->buffer_id);
++    }
++  }
++
++  // Zero-copy DMA-BUF import path (supports arbitrary tiled DRM modifiers and
++  // optional explicit sync_file fence).
++  gfx::NativePixmapHandle pixmap;
++  pixmap.modifier = mod;
++  for (int p = 0; p < plane_count; ++p) {
++    const int src_fd = frame.handle.linux_dmabuf.fds[p] >= 0
++                           ? frame.handle.linux_dmabuf.fds[p]
++                           : frame.handle.linux_dmabuf.fds[0];
++    base::ScopedFD dup_fd(HANDLE_EINTR(dup(src_fd)));
++    if (!dup_fd.is_valid()) {
++      release_runner.Disarm();
++      return false;
++    }
++    const uint32_t stride = frame.handle.linux_dmabuf.strides[p];
++    const uint64_t offset = frame.handle.linux_dmabuf.offsets[p];
++    const uint64_t rows =
++        (p == 0) ? static_cast<uint64_t>(coded_size.height())
++                 : static_cast<uint64_t>((coded_size.height() + 1) / 2);
++    if (stride == 0) {
++      release_runner.Disarm();
++      return false;
++    }
++    pixmap.planes.emplace_back(static_cast<int>(stride),
++                               static_cast<int>(offset), stride * rows,
++                               std::move(dup_fd));
++  }
++
++  base::ScopedFD fence_dup;
++  if (frame.handle.linux_dmabuf.sync_fence_fd >= 0) {
++    fence_dup.reset(HANDLE_EINTR(dup(frame.handle.linux_dmabuf.sync_fence_fd)));
++    if (!fence_dup.is_valid()) {
++      release_runner.Disarm();
++      return false;
++    }
++  }
++
++  auto payload = std::make_unique<ImportedGpuPayload>();
++  payload->slot_format = slot_fmt;
++  payload->coded_size = coded_size;
++  payload->visible_rect = visible_rect;
++  payload->timestamp_us = frame.timestamp_us;
++  payload->reference_time = now_ticks;
++  payload->color_space = color_space;
++  payload->surface_key = frame.surface_key;
++  payload->native_pixmap_handle = std::move(pixmap);
++  payload->sync_fence_fd = std::move(fence_dup);
++  payload->release_runner = std::move(release_runner);
++
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_ || mode_ == BackendMode::kSharedMemory) {
++      payload->release_runner.Disarm();
++      return false;
++    }
++    if (mode_ == BackendMode::kPendingInit) {
++      auto cold = std::make_unique<ColdStartGpuFrame>();
++      cold->imported_payload = std::move(payload);
++      cold_start_gpu_frame_ = std::move(cold);
++      cold_start_frame_ = nullptr;
++      return true;
++    }
++  }
++
++  task_runner_->PostTask(
++      FROM_HERE,
++      base::BindOnce(&ExternalVideoSource::SubmitImportedGpuFrameOnSequence,
++                     base::WrapRefCounted(this), std::move(payload)));
++  return true;
++
++#elif BUILDFLAG(IS_MAC)
++  if (frame.handle_type != CEF_EXT_GPU_HANDLE_MAC_IOSURFACE) {
++    return false;
++  }
++
++  gfx::ScopedIOSurface src_surface;
++  if (frame.handle.mac_iosurface.io_surface_ref) {
++    src_surface.reset(
++        static_cast<IOSurfaceRef>(frame.handle.mac_iosurface.io_surface_ref),
++        base::scoped_policy::RETAIN);
++  } else if (frame.handle.mac_iosurface.io_surface_id != 0) {
++    src_surface.reset(IOSurfaceLookup(frame.handle.mac_iosurface.io_surface_id),
++                      base::scoped_policy::ASSUME);
++  }
++  if (!src_surface) {
++    return false;
++  }
++
++  SlotPixelFormat slot_fmt = SlotPixelFormat::kNV12;
++  if (frame.format != CEF_EXT_GPU_FORMAT_AUTO) {
++    if (!FromCefGpuFormat(frame.format, &slot_fmt)) {
++      return false;
++    }
++  } else {
++    const uint32_t pf = IOSurfaceGetPixelFormat(src_surface);
++    if (pf == MakeFourCC('4', '2', '0', 'v') ||
++        pf == MakeFourCC('4', '2', '0', 'f')) {
++      slot_fmt = SlotPixelFormat::kNV12;
++    } else if (pf == MakeFourCC('x', '4', '2', '0') ||
++               pf == MakeFourCC('x', 'f', '2', '0')) {
++      slot_fmt = SlotPixelFormat::kP010;
++    } else if (pf == MakeFourCC('B', 'G', 'R', 'A')) {
++      slot_fmt = SlotPixelFormat::kBGRA8;
++    } else if (pf == MakeFourCC('R', 'G', 'B', 'A')) {
++      slot_fmt = SlotPixelFormat::kRGBA8;
++    } else {
++      return false;
++    }
++  }
++
++  const int surf_w = static_cast<int>(IOSurfaceGetWidth(src_surface));
++  const int surf_h = static_cast<int>(IOSurfaceGetHeight(src_surface));
++  const int coded_w = (frame.coded_width == 0) ? surf_w : frame.coded_width;
++  const int coded_h = (frame.coded_height == 0) ? surf_h : frame.coded_height;
++  if (coded_w > surf_w || coded_h > surf_h) {
++    return false;
++  }
++  const gfx::Size coded_size(coded_w, coded_h);
++  gfx::Rect visible_rect;
++  if (!ComputeAndValidateVisibleRect(frame, coded_size, max_size_, slot_fmt,
++                                     &visible_rect)) {
++    return false;
++  }
++
++  const gfx::ColorSpace color_space =
++      ResolveGpuFrameColorSpace(frame.color, visible_rect.height(), slot_fmt);
++  ScopedGpuReleaseRunner release_runner(frame.release_callback,
++                                        frame.release_ctx);
++
++  if (release_runner.HasCallback()) {
++    auto payload = std::make_unique<ImportedGpuPayload>();
++    payload->slot_format = slot_fmt;
++    payload->coded_size = coded_size;
++    payload->visible_rect = visible_rect;
++    payload->timestamp_us = frame.timestamp_us;
++    payload->reference_time = now_ticks;
++    payload->color_space = color_space;
++    payload->surface_key =
++        frame.surface_key != 0
++            ? frame.surface_key
++            : static_cast<uint64_t>(IOSurfaceGetID(src_surface));
++    payload->io_surface = std::move(src_surface);
++    payload->release_runner = std::move(release_runner);
++
++    {
++      base::AutoLock lock(lock_);
++      if (shut_down_ || mode_ == BackendMode::kSharedMemory) {
++        payload->release_runner.Disarm();
++        return false;
++      }
++      if (mode_ == BackendMode::kPendingInit) {
++        auto cold = std::make_unique<ColdStartGpuFrame>();
++        cold->imported_payload = std::move(payload);
++        cold_start_gpu_frame_ = std::move(cold);
++        cold_start_frame_ = nullptr;
++        return true;
++      }
++    }
++
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ExternalVideoSource::SubmitImportedGpuFrameOnSequence,
++                       base::WrapRefCounted(this), std::move(payload)));
++    return true;
++  }
++
++  // Copy-on-push for macOS IOSurface when release_callback == NULL.
++  auto copy_iosurface = [](IOSurfaceRef src, IOSurfaceRef dst,
++                           const gfx::Size& sz, SlotPixelFormat fmt) -> bool {
++    if (!src || !dst) {
++      return false;
++    }
++    if (IOSurfaceLock(src, kIOSurfaceLockReadOnly, nullptr) !=
++        kIOReturnSuccess) {
++      return false;
++    }
++    if (IOSurfaceLock(dst, 0, nullptr) != kIOReturnSuccess) {
++      IOSurfaceUnlock(src, kIOSurfaceLockReadOnly, nullptr);
++      return false;
++    }
++    bool ok = true;
++    if (IsBiplanarSlotFormat(fmt)) {
++      const size_t bpp = (fmt == SlotPixelFormat::kP010) ? 2u : 1u;
++      for (size_t p = 0; p < 2; ++p) {
++        const auto* sp =
++            static_cast<const uint8_t*>(IOSurfaceGetBaseAddressOfPlane(src, p));
++        auto* dp =
++            static_cast<uint8_t*>(IOSurfaceGetBaseAddressOfPlane(dst, p));
++        const int ss = static_cast<int>(IOSurfaceGetBytesPerRowOfPlane(src, p));
++        const int ds = static_cast<int>(IOSurfaceGetBytesPerRowOfPlane(dst, p));
++        const int rows = (p == 0) ? sz.height() : (sz.height() / 2);
++        const size_t rb = static_cast<size_t>(sz.width()) * bpp;
++        if (!sp || !dp || static_cast<size_t>(ss) < rb ||
++            static_cast<size_t>(ds) < rb) {
++          ok = false;
++          break;
++        }
++        StreamCopyRawRows(sp, ss, dp, ds, rb, rows);
++      }
++    } else {
++      const auto* sp = static_cast<const uint8_t*>(IOSurfaceGetBaseAddress(src));
++      auto* dp = static_cast<uint8_t*>(IOSurfaceGetBaseAddress(dst));
++      const int ss = static_cast<int>(IOSurfaceGetBytesPerRow(src));
++      const int ds = static_cast<int>(IOSurfaceGetBytesPerRow(dst));
++      const size_t rb = static_cast<size_t>(sz.width()) * 4u;
++      if (!sp || !dp || static_cast<size_t>(ss) < rb ||
++          static_cast<size_t>(ds) < rb) {
++        ok = false;
++      } else {
++        StreamCopyRawRows(sp, ss, dp, ds, rb, sz.height());
++      }
++    }
++    StreamStoreFence();
++    IOSurfaceUnlock(dst, 0, nullptr);
++    IOSurfaceUnlock(src, kIOSurfaceLockReadOnly, nullptr);
++    return ok;
++  };
++
++  scoped_refptr<TextureSlot> tex_slot;
++  bool need_cold = false;
++  bool post_alloc = false;
++  bool post_reclaim = false;
++  bool drop_after_lock = false;
++
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_ || mode_ == BackendMode::kSharedMemory) {
++      return false;
++    }
++    desired_coded_size_ = coded_size;
++    desired_pool_format_ = slot_fmt;
++    desired_color_space_ = color_space;
++
++    if (mode_ == BackendMode::kPendingInit) {
++      need_cold = true;
++    } else if (texture_pool_coded_size_ == coded_size &&
++               texture_pool_format_ == slot_fmt) {
++      if (device_ready_ && !texture_alloc_in_flight_ && !reclaim_in_flight_ &&
++          HasStaleInFlightSlotLocked(now_ticks)) {
++        reclaim_in_flight_ = true;
++        post_reclaim = true;
++      }
++      if (!free_texture_slots_.empty()) {
++        tex_slot = std::move(free_texture_slots_.front());
++        free_texture_slots_.pop_front();
++        tex_slot->submit_seq = ++next_submit_seq_;
++        tex_slot->in_flight_since = now_ticks;
++        tex_slot->dma_in_progress = true;
++        in_flight_texture_slots_[tex_slot->buffer_id] = tex_slot;
++      } else {
++        drop_after_lock = true;
++      }
++    } else {
++      if (!has_completed_initial_setup_) {
++        need_cold = true;
++      }
++      if (device_ready_ && !texture_alloc_in_flight_) {
++        texture_alloc_in_flight_ = true;
++        post_alloc = true;
++      }
++    }
++  }
++
++  if (post_reclaim) {
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ExternalVideoSource::ReclaimStaleTextureSlotsOnSequence,
++                       base::WrapRefCounted(this)));
++  }
++  if (drop_after_lock) {
++    return true;
++  }
++
++  if (tex_slot) {
++    if (!copy_iosurface(src_surface, tex_slot->io_surface, coded_size,
++                        slot_fmt)) {
++      ReturnTransientDroppedSlot(tex_slot->buffer_id);
++      return false;
++    }
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ExternalVideoSource::SubmitTextureFrameOnSequence,
++                       base::WrapRefCounted(this), tex_slot->buffer_id,
++                       slot_fmt, coded_size, visible_rect, frame.timestamp_us,
++                       now_ticks, color_space));
++    return true;
++  }
++
++  if (need_cold) {
++    gfx::ScopedIOSurface cold_surf(
++        gfx::CreateIOSurface(coded_size, ToGfxBufferFormat(slot_fmt), false));
++    if (cold_surf && copy_iosurface(src_surface, cold_surf, coded_size, slot_fmt)) {
++      auto cold = std::make_unique<ColdStartGpuFrame>();
++      cold->slot_format = slot_fmt;
++      cold->coded_size = coded_size;
++      cold->visible_rect = visible_rect;
++      cold->timestamp_us = frame.timestamp_us;
++      cold->reference_time = now_ticks;
++      cold->color_space = color_space;
++      cold->io_surface_copy = std::move(cold_surf);
++
++      base::AutoLock lock(lock_);
++      if (!shut_down_ && !has_completed_initial_setup_) {
++        cold_start_gpu_frame_ = std::move(cold);
++        cold_start_frame_ = nullptr;
++      }
++    }
++  }
++
++  if (post_alloc) {
++    task_runner_->PostTask(
++        FROM_HERE,
++        base::BindOnce(&ExternalVideoSource::EnsureTexturePoolOnSequence,
++                       base::WrapRefCounted(this)));
++  }
++  return true;
++#else
++  (void)now_ticks;
++  return false;
++#endif
++}
++
 +void ExternalVideoSource::Shutdown() {
++  std::unique_ptr<ColdStartGpuFrame> cold_gpu;
 +  {
 +    base::AutoLock lock(lock_);
 +    shut_down_ = true;
 +    device_ready_ = false;
 +    cold_start_frame_ = nullptr;
++    cold_gpu = std::move(cold_start_gpu_frame_);
 +    reserved_slots_.clear();
 +    shmem_buffers_.clear();
 +    free_texture_slots_.clear();
++#if BUILDFLAG(IS_WIN)
++    d3d12_uploader_shared_.reset();
++#endif
 +  }
++  cold_gpu.reset();
 +  task_runner_->PostTask(
 +      FROM_HERE, base::BindOnce(&ExternalVideoSource::ShutdownOnSequence,
 +                                base::WrapRefCounted(this)));
@@ -2217,7 +4083,7 @@ index 0000000..8dcab58
 +  }
 +
 +  InitSharedMemoryBackendOnSequence(
-+      "GPU compositing disabled, software renderer, or native NV12 unsupported");
++      "GPU compositing disabled, software renderer, or native texture unsupported");
 +}
 +
 +bool ExternalVideoSource::TryInitTextureBackendOnSequence(
@@ -2225,7 +4091,8 @@ index 0000000..8dcab58
 +    gpu::GpuMemoryBufferManager* gmb_manager) {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 +
-+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
++    BUILDFLAG(IS_MAC)
 +  if (!gpu_channel || gpu_channel->IsLost() ||
 +      !IsHardwareGpuInfoUsable(gpu_channel->gpu_info())) {
 +    return false;
@@ -2243,9 +4110,9 @@ index 0000000..8dcab58
 +  if (!uploader) {
 +    return false;
 +  }
-+  d3d12_uploader_ = std::move(uploader);
++  d3d12_uploader_ = uploader;
 +  const char* backend_detail =
-+      "Windows D3D12 CopyQueue DMA + keyless DXGI NV12 SharedImage";
++      "Windows D3D11/D3D12 DMA + keyless DXGI SharedImage";
 +#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 +  const int probe_mode =
 +      ProbeLinuxNativePixmapNV12(gpu_channel->channel_id(), gmb_manager);
@@ -2254,8 +4121,13 @@ index 0000000..8dcab58
 +  }
 +  linux_use_scanout_gmb_ = (probe_mode == 1);
 +  const char* backend_detail = linux_use_scanout_gmb_
-+                                   ? "Linux NativePixmap DMA-BUF NV12 (scanout)"
-+                                   : "Linux NativePixmap DMA-BUF NV12 (linear)";
++                                   ? "Linux NativePixmap DMA-BUF (scanout)"
++                                   : "Linux NativePixmap DMA-BUF (linear)";
++#elif BUILDFLAG(IS_MAC)
++  if (!gmb_manager) {
++    return false;
++  }
++  const char* backend_detail = "macOS IOSurface SharedImage";
 +#endif
 +
 +  gpu_channel_ = std::move(gpu_channel);
@@ -2277,6 +4149,7 @@ index 0000000..8dcab58
 +  LogTextureBackendActivatedOnce(backend_detail);
 +
 +  bool should_allocate_pool = false;
++  std::unique_ptr<ImportedGpuPayload> pending_imported_cold;
 +  {
 +    base::AutoLock lock(lock_);
 +    if (shut_down_) {
@@ -2284,12 +4157,23 @@ index 0000000..8dcab58
 +    }
 +    mode_ = BackendMode::kTexture;
 +    device_ready_ = true;
++#if BUILDFLAG(IS_WIN)
++    d3d12_uploader_shared_ = d3d12_uploader_;
++#endif
++    if (cold_start_gpu_frame_ && cold_start_gpu_frame_->imported_payload) {
++      pending_imported_cold =
++          std::move(cold_start_gpu_frame_->imported_payload);
++      cold_start_gpu_frame_.reset();
++    }
 +    if (!desired_coded_size_.IsEmpty() && !texture_alloc_in_flight_) {
 +      texture_alloc_in_flight_ = true;
 +      should_allocate_pool = true;
 +    }
 +  }
 +
++  if (pending_imported_cold) {
++    SubmitImportedGpuFrameOnSequence(std::move(pending_imported_cold));
++  }
 +  if (should_allocate_pool) {
 +    EnsureTexturePoolOnSequence();
 +  }
@@ -2326,6 +4210,7 @@ index 0000000..8dcab58
 +      &ExternalVideoSource::OnShmemDeviceError, base::Unretained(this)));
 +
 +  bool should_reserve = false;
++  std::unique_ptr<ColdStartGpuFrame> drop_cold_gpu;
 +  {
 +    base::AutoLock lock(lock_);
 +    if (shut_down_) {
@@ -2338,6 +4223,10 @@ index 0000000..8dcab58
 +    texture_pool_coded_size_ = gfx::Size();
 +    free_texture_slots_.clear();
 +    in_flight_texture_slots_.clear();
++    drop_cold_gpu = std::move(cold_start_gpu_frame_);
++#if BUILDFLAG(IS_WIN)
++    d3d12_uploader_shared_.reset();
++#endif
 +    reserved_slots_.clear();
 +    if (!desired_coded_size_.IsEmpty() && !reserve_in_flight_) {
 +      reserve_in_flight_ = true;
@@ -2345,6 +4234,7 @@ index 0000000..8dcab58
 +      should_reserve = true;
 +    }
 +  }
++  drop_cold_gpu.reset();
 +
 +  if (should_reserve) {
 +    ReserveBufferOnSequence();
@@ -2367,25 +4257,52 @@ index 0000000..8dcab58
 +  gmb_manager_ = nullptr;
 +#if BUILDFLAG(IS_WIN)
 +  d3d12_uploader_.reset();
++  {
++    base::AutoLock lock(lock_);
++    d3d12_uploader_shared_.reset();
++  }
 +#endif
 +
 +  InitSharedMemoryBackendOnSequence(reason);
++}
++
++bool ExternalVideoSource::RegisterSlotMailboxesOnSequence(
++    const TextureSlot& slot,
++    const gpu::SyncToken& sync_token) {
++  if (!texture_device_.is_bound()) {
++    return false;
++  }
++  auto handle_set = media::mojom::MailboxBufferHandleSet::New();
++  handle_set->mailbox_holder.resize(media::VideoFrame::kMaxPlanes);
++  handle_set->mailbox_holder[0] =
++      gpu::MailboxHolder(slot.mailbox_y, sync_token, slot.texture_target);
++  if (IsBiplanarSlotFormat(slot.slot_format)) {
++    handle_set->mailbox_holder[1] =
++        gpu::MailboxHolder(slot.mailbox_uv, sync_token, slot.texture_target);
++  }
++  texture_device_->OnNewMailboxHolderBufferHandle(slot.buffer_id,
++                                                  std::move(handle_set));
++  registered_texture_buffer_ids_.insert(slot.buffer_id);
++  return true;
 +}
 +
 +void ExternalVideoSource::EnsureTexturePoolOnSequence() {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 +
 +  gfx::Size target_size;
++  SlotPixelFormat target_fmt = SlotPixelFormat::kNV12;
 +  gfx::ColorSpace target_cs;
 +  {
 +    base::AutoLock lock(lock_);
 +    if (shut_down_ || mode_ != BackendMode::kTexture ||
 +        !texture_device_.is_bound() || desired_coded_size_.IsEmpty() ||
-+        texture_pool_coded_size_ == desired_coded_size_) {
++        (texture_pool_coded_size_ == desired_coded_size_ &&
++         texture_pool_format_ == desired_pool_format_)) {
 +      texture_alloc_in_flight_ = false;
 +      return;
 +    }
 +    target_size = desired_coded_size_;
++    target_fmt = desired_pool_format_;
 +    target_cs = desired_color_space_;
 +  }
 +
@@ -2395,7 +4312,8 @@ index 0000000..8dcab58
 +  }
 +
 +  if (!target_cs.IsValid()) {
-+    target_cs = ToGfxColorSpace(nullptr, target_size.height());
++    target_cs = ResolveGpuFrameColorSpace(nullptr, target_size.height(),
++                                          target_fmt);
 +  }
 +
 +  std::deque<scoped_refptr<TextureSlot>> old_idle_slots;
@@ -2418,13 +4336,14 @@ index 0000000..8dcab58
 +  for (size_t i = 0; i < kTexturePoolSlots; ++i) {
 +    const int32_t buffer_id = next_texture_buffer_id_++;
 +    scoped_refptr<TextureSlot> slot =
-+        CreateTextureSlotOnSequence(buffer_id, target_size, target_cs);
++        CreateTextureSlotOnSequence(buffer_id, target_size, target_fmt,
++                                    target_cs);
 +    if (!slot) {
 +      for (const auto& partial : new_slots) {
 +        DestroySlotSharedImagesOnSequence(*partial);
 +      }
 +      FallbackToSharedMemoryOnSequence(
-+          "failed to allocate GPU NV12 texture slot");
++          "failed to allocate GPU texture pool slot");
 +      return;
 +    }
 +    new_slots.push_back(std::move(slot));
@@ -2441,20 +4360,13 @@ index 0000000..8dcab58
 +  }
 +
 +  for (const auto& slot : new_slots) {
-+    auto handle_set = media::mojom::MailboxBufferHandleSet::New();
-+    handle_set->mailbox_holder.resize(media::VideoFrame::kMaxPlanes);
-+    handle_set->mailbox_holder[0] =
-+        gpu::MailboxHolder(slot->mailbox_y, sync_token, slot->texture_target);
-+    handle_set->mailbox_holder[1] =
-+        gpu::MailboxHolder(slot->mailbox_uv, sync_token, slot->texture_target);
-+    texture_device_->OnNewMailboxHolderBufferHandle(slot->buffer_id,
-+                                                    std::move(handle_set));
-+    registered_texture_buffer_ids_.insert(slot->buffer_id);
++    RegisterSlotMailboxesOnSequence(*slot, sync_token);
 +  }
 +
 +  scoped_refptr<media::VideoFrame> cold_frame;
++  std::unique_ptr<ColdStartGpuFrame> cold_gpu;
 +  scoped_refptr<TextureSlot> cold_slot;
-+  bool size_changed_again = false;
++  bool config_changed_again = false;
 +  {
 +    base::AutoLock lock(lock_);
 +    if (shut_down_ || mode_ != BackendMode::kTexture) {
@@ -2463,10 +4375,27 @@ index 0000000..8dcab58
 +    }
 +
 +    texture_pool_coded_size_ = target_size;
++    texture_pool_format_ = target_fmt;
 +    has_completed_initial_setup_ = true;
 +
-+    if (cold_start_frame_ && cold_start_frame_->coded_size() == target_size) {
++    if (cold_start_gpu_frame_ &&
++        cold_start_gpu_frame_->coded_size == target_size &&
++        cold_start_gpu_frame_->slot_format == target_fmt) {
++      cold_gpu = std::move(cold_start_gpu_frame_);
++      cold_start_frame_ = nullptr;
++      cold_slot = new_slots[0];
++      cold_slot->submit_seq = ++next_submit_seq_;
++      cold_slot->in_flight_since = base::TimeTicks::Now();
++      cold_slot->dma_in_progress = true;
++      in_flight_texture_slots_[cold_slot->buffer_id] = cold_slot;
++      for (size_t i = 1; i < new_slots.size(); ++i) {
++        free_texture_slots_.push_back(std::move(new_slots[i]));
++      }
++    } else if (cold_start_frame_ &&
++               cold_start_frame_->coded_size() == target_size &&
++               target_fmt == SlotPixelFormat::kNV12) {
 +      cold_frame = std::move(cold_start_frame_);
++      cold_start_gpu_frame_.reset();
 +      cold_slot = new_slots[0];
 +      cold_slot->submit_seq = ++next_submit_seq_;
 +      cold_slot->in_flight_since = base::TimeTicks::Now();
@@ -2477,26 +4406,122 @@ index 0000000..8dcab58
 +      }
 +    } else {
 +      cold_start_frame_ = nullptr;
++      cold_start_gpu_frame_.reset();
 +      for (auto& slot : new_slots) {
 +        free_texture_slots_.push_back(std::move(slot));
 +      }
 +    }
 +
-+    if (!desired_coded_size_.IsEmpty() && desired_coded_size_ != target_size) {
-+      size_changed_again = true;
++    if (!desired_coded_size_.IsEmpty() &&
++        (desired_coded_size_ != target_size ||
++         desired_pool_format_ != target_fmt)) {
++      config_changed_again = true;
 +    } else {
 +      texture_alloc_in_flight_ = false;
 +    }
 +  }
 +
++  if (cold_gpu && cold_slot) {
++#if BUILDFLAG(IS_WIN)
++    if (cold_gpu->d3d11_temp_tex && cold_slot->uploader) {
++      const int32_t buf_id = cold_slot->buffer_id;
++      const SlotPixelFormat sfmt = cold_gpu->slot_format;
++      const gfx::Size sz = cold_gpu->coded_size;
++      const gfx::Rect vr = cold_gpu->visible_rect;
++      const int64_t ts = cold_gpu->timestamp_us;
++      const base::TimeTicks rt = cold_gpu->reference_time;
++      const gfx::ColorSpace cs = cold_gpu->color_space;
++      scoped_refptr<ExternalVideoSource> self = base::WrapRefCounted(this);
++      auto status = cold_slot->uploader->SubmitGpuTextureCopy(
++          cold_gpu->d3d11_temp_tex.Get(), cold_gpu->d3d11_temp_desc,
++          cold_slot->d3d11_texture, sfmt, /*direct_copy_ok=*/true, 0, 0,
++          /*wait_until_gpu_done=*/true,
++          base::BindOnce(
++              [](scoped_refptr<ExternalVideoSource> src, int32_t id,
++                 SlotPixelFormat fmt, gfx::Size csz, gfx::Rect vis,
++                 int64_t ts_us, base::TimeTicks ref_t, gfx::ColorSpace col,
++                 bool ok) {
++                if (ok) {
++                  src->task_runner_->PostTask(
++                      FROM_HERE,
++                      base::BindOnce(
++                          &ExternalVideoSource::SubmitTextureFrameOnSequence,
++                          src, id, fmt, csz, vis, ts_us, ref_t, col));
++                } else {
++                  src->ReturnTransientDroppedSlot(id);
++                }
++              },
++              self, buf_id, sfmt, sz, vr, ts, rt, cs));
++      if (status != SharedD3D12CopyUploader::UploadStatus::kSubmitted) {
++        ReturnTransientDroppedSlot(buf_id);
++      }
++    } else {
++      ReturnTransientDroppedSlot(cold_slot->buffer_id);
++    }
++#elif BUILDFLAG(IS_MAC)
++    bool ok = false;
++    if (cold_gpu->io_surface_copy && cold_slot->io_surface &&
++        IOSurfaceLock(cold_gpu->io_surface_copy, kIOSurfaceLockReadOnly,
++                      nullptr) == kIOReturnSuccess) {
++      if (IOSurfaceLock(cold_slot->io_surface, 0, nullptr) ==
++          kIOReturnSuccess) {
++        ok = true;
++        if (IsBiplanarSlotFormat(cold_gpu->slot_format)) {
++          const size_t bpp =
++              (cold_gpu->slot_format == SlotPixelFormat::kP010) ? 2u : 1u;
++          for (size_t p = 0; p < 2; ++p) {
++            const auto* sp = static_cast<const uint8_t*>(
++                IOSurfaceGetBaseAddressOfPlane(cold_gpu->io_surface_copy, p));
++            auto* dp = static_cast<uint8_t*>(
++                IOSurfaceGetBaseAddressOfPlane(cold_slot->io_surface, p));
++            const int ss = static_cast<int>(
++                IOSurfaceGetBytesPerRowOfPlane(cold_gpu->io_surface_copy, p));
++            const int ds = static_cast<int>(
++                IOSurfaceGetBytesPerRowOfPlane(cold_slot->io_surface, p));
++            const int rows = (p == 0) ? cold_gpu->coded_size.height()
++                                      : (cold_gpu->coded_size.height() / 2);
++            StreamCopyRawRows(sp, ss, dp, ds,
++                              static_cast<size_t>(cold_gpu->coded_size.width()) *
++                                  bpp,
++                              rows);
++          }
++        } else {
++          StreamCopyRawRows(
++              static_cast<const uint8_t*>(
++                  IOSurfaceGetBaseAddress(cold_gpu->io_surface_copy)),
++              static_cast<int>(
++                  IOSurfaceGetBytesPerRow(cold_gpu->io_surface_copy)),
++              static_cast<uint8_t*>(
++                  IOSurfaceGetBaseAddress(cold_slot->io_surface)),
++              static_cast<int>(IOSurfaceGetBytesPerRow(cold_slot->io_surface)),
++              static_cast<size_t>(cold_gpu->coded_size.width()) * 4u,
++              cold_gpu->coded_size.height());
++        }
++        StreamStoreFence();
++        IOSurfaceUnlock(cold_slot->io_surface, 0, nullptr);
++      }
++      IOSurfaceUnlock(cold_gpu->io_surface_copy, kIOSurfaceLockReadOnly,
++                      nullptr);
++    }
++    if (ok) {
++      SubmitTextureFrameOnSequence(
++          cold_slot->buffer_id, cold_gpu->slot_format, cold_gpu->coded_size,
++          cold_gpu->visible_rect, cold_gpu->timestamp_us,
++          cold_gpu->reference_time, cold_gpu->color_space);
++    } else {
++      ReturnTransientDroppedSlot(cold_slot->buffer_id);
++    }
++#else
++    ReturnTransientDroppedSlot(cold_slot->buffer_id);
++#endif
++  }
++
 +  if (cold_frame && cold_slot) {
-+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 +    const base::TimeTicks rt =
 +        cold_frame->metadata().reference_time.value_or(base::TimeTicks::Now());
 +    const int64_t ts_us = cold_frame->timestamp().InMicroseconds();
 +    const gfx::ColorSpace cs = cold_frame->ColorSpace();
 +    const gfx::Rect vis_rect = cold_frame->visible_rect();
-+#endif
 +#if BUILDFLAG(IS_WIN)
 +    const int32_t buf_id = cold_slot->buffer_id;
 +    const gfx::Size slot_size = cold_slot->coded_size;
@@ -2510,7 +4535,7 @@ index 0000000..8dcab58
 +                FROM_HERE,
 +                base::BindOnce(
 +                    &ExternalVideoSource::SubmitTextureFrameOnSequence, src, id,
-+                    sz, vr, ts, ref_t, color_s));
++                    SlotPixelFormat::kNV12, sz, vr, ts, ref_t, color_s));
 +          } else {
 +            src->task_runner_->PostTask(
 +                FROM_HERE,
@@ -2561,17 +4586,53 @@ index 0000000..8dcab58
 +      cold_slot->gmb->Unmap();
 +    }
 +    if (ok) {
-+      SubmitTextureFrameOnSequence(cold_slot->buffer_id, cold_slot->coded_size,
-+                                   vis_rect, ts_us, rt, cs);
++      SubmitTextureFrameOnSequence(cold_slot->buffer_id, SlotPixelFormat::kNV12,
++                                   cold_slot->coded_size, vis_rect, ts_us, rt,
++                                   cs);
 +    } else {
 +      HandleTextureUploadFailureOnSequence(
 +          cold_slot->buffer_id, "Linux cold-start NativePixmap Map failed");
 +      return;
 +    }
++#elif BUILDFLAG(IS_MAC)
++    bool ok = false;
++    if (cold_slot->io_surface &&
++        IOSurfaceLock(cold_slot->io_surface, 0, nullptr) == kIOReturnSuccess) {
++      uint8_t* dst_y = static_cast<uint8_t*>(
++          IOSurfaceGetBaseAddressOfPlane(cold_slot->io_surface, 0));
++      uint8_t* dst_uv = static_cast<uint8_t*>(
++          IOSurfaceGetBaseAddressOfPlane(cold_slot->io_surface, 1));
++      const int stride_y = static_cast<int>(
++          IOSurfaceGetBytesPerRowOfPlane(cold_slot->io_surface, 0));
++      const int stride_uv = static_cast<int>(
++          IOSurfaceGetBytesPerRowOfPlane(cold_slot->io_surface, 1));
++      if (dst_y && dst_uv) {
++        StreamCopyI420ToNV12Planes(
++            cold_frame->data(media::VideoFrame::kYPlane),
++            cold_frame->stride(media::VideoFrame::kYPlane),
++            cold_frame->data(media::VideoFrame::kUPlane),
++            cold_frame->stride(media::VideoFrame::kUPlane),
++            cold_frame->data(media::VideoFrame::kVPlane),
++            cold_frame->stride(media::VideoFrame::kVPlane), vis_rect.width(),
++            vis_rect.height(), cold_slot->coded_size, dst_y, stride_y, dst_uv,
++            stride_uv);
++        ok = true;
++      }
++      IOSurfaceUnlock(cold_slot->io_surface, 0, nullptr);
++    }
++    if (ok) {
++      SubmitTextureFrameOnSequence(cold_slot->buffer_id, SlotPixelFormat::kNV12,
++                                   cold_slot->coded_size, vis_rect, ts_us, rt,
++                                   cs);
++    } else {
++      HandleTextureUploadFailureOnSequence(
++          cold_slot->buffer_id, "macOS cold-start IOSurface Lock failed");
++      return;
++    }
 +#endif
 +  }
 +
-+  if (size_changed_again) {
++  if (config_changed_again) {
 +    task_runner_->PostTask(
 +        FROM_HERE,
 +        base::BindOnce(&ExternalVideoSource::EnsureTexturePoolOnSequence,
@@ -2583,16 +4644,12 @@ index 0000000..8dcab58
 +    base::TimeTicks now) const {
 +  const bool pool_exhausted = free_texture_slots_.empty();
 +  for (const auto& [id, slot] : in_flight_texture_slots_) {
-+    if (slot->dma_in_progress) {
++    if (slot->is_imported || slot->dma_in_progress) {
 +      continue;
 +    }
 +    if (now - slot->in_flight_since < kStaleTextureSlotTimeout) {
 +      continue;
 +    }
-+    // Reclaim only when a newer frame has ALREADY finished displaying (proving
-+    // this older slot was leaked by BroadcastingReceiver on client disconnect)
-+    // OR when all 3 slots in the pool are wedged while PushFrame is active.
-+    // A single legitimate paused <video> frame is never disturbed.
 +    if (slot->submit_seq < last_completed_seq_ || pool_exhausted) {
 +      return true;
 +    }
@@ -2605,6 +4662,7 @@ index 0000000..8dcab58
 +
 +  std::vector<scoped_refptr<TextureSlot>> stale_slots;
 +  gfx::Size target_size;
++  SlotPixelFormat target_fmt = SlotPixelFormat::kNV12;
 +  gfx::ColorSpace target_cs;
 +  {
 +    base::AutoLock lock(lock_);
@@ -2620,7 +4678,7 @@ index 0000000..8dcab58
 +    for (auto it = in_flight_texture_slots_.begin();
 +         it != in_flight_texture_slots_.end();) {
 +      const scoped_refptr<TextureSlot>& slot = it->second;
-+      if (!slot->dma_in_progress &&
++      if (!slot->is_imported && !slot->dma_in_progress &&
 +          (now - slot->in_flight_since >= kStaleTextureSlotTimeout) &&
 +          (slot->submit_seq < last_completed_seq_ || pool_exhausted)) {
 +        stale_slots.push_back(slot);
@@ -2635,6 +4693,7 @@ index 0000000..8dcab58
 +      return;
 +    }
 +    target_size = texture_pool_coded_size_;
++    target_fmt = texture_pool_format_;
 +    target_cs = desired_color_space_;
 +  }
 +
@@ -2644,10 +4703,12 @@ index 0000000..8dcab58
 +  }
 +
 +  if (!target_cs.IsValid()) {
-+    target_cs = ToGfxColorSpace(nullptr, target_size.height());
++    target_cs = ResolveGpuFrameColorSpace(nullptr, target_size.height(),
++                                          target_fmt);
 +  }
 +
 +  for (const auto& old_slot : stale_slots) {
++    old_slot->release_runner.RunNow();
 +    if (registered_texture_buffer_ids_.erase(old_slot->buffer_id) > 0 &&
 +        texture_device_.is_bound()) {
 +      texture_device_->OnBufferRetired(old_slot->buffer_id);
@@ -2660,13 +4721,13 @@ index 0000000..8dcab58
 +  for (size_t i = 0; i < stale_slots.size(); ++i) {
 +    const int32_t new_id = next_texture_buffer_id_++;
 +    scoped_refptr<TextureSlot> slot =
-+        CreateTextureSlotOnSequence(new_id, target_size, target_cs);
++        CreateTextureSlotOnSequence(new_id, target_size, target_fmt, target_cs);
 +    if (!slot) {
 +      for (const auto& partial : replacements) {
 +        DestroySlotSharedImagesOnSequence(*partial);
 +      }
 +      FallbackToSharedMemoryOnSequence(
-+          "failed to allocate replacement GPU NV12 texture slot");
++          "failed to allocate replacement GPU texture slot");
 +      return;
 +    }
 +    replacements.push_back(std::move(slot));
@@ -2683,15 +4744,7 @@ index 0000000..8dcab58
 +  }
 +
 +  for (const auto& slot : replacements) {
-+    auto handle_set = media::mojom::MailboxBufferHandleSet::New();
-+    handle_set->mailbox_holder.resize(media::VideoFrame::kMaxPlanes);
-+    handle_set->mailbox_holder[0] =
-+        gpu::MailboxHolder(slot->mailbox_y, sync_token, slot->texture_target);
-+    handle_set->mailbox_holder[1] =
-+        gpu::MailboxHolder(slot->mailbox_uv, sync_token, slot->texture_target);
-+    texture_device_->OnNewMailboxHolderBufferHandle(slot->buffer_id,
-+                                                    std::move(handle_set));
-+    registered_texture_buffer_ids_.insert(slot->buffer_id);
++    RegisterSlotMailboxesOnSequence(*slot, sync_token);
 +  }
 +
 +  std::vector<scoped_refptr<TextureSlot>> discard_slots;
@@ -2699,7 +4752,8 @@ index 0000000..8dcab58
 +    base::AutoLock lock(lock_);
 +    reclaim_in_flight_ = false;
 +    if (!shut_down_ && mode_ == BackendMode::kTexture &&
-+        texture_pool_coded_size_ == target_size) {
++        texture_pool_coded_size_ == target_size &&
++        texture_pool_format_ == target_fmt) {
 +      for (auto& slot : replacements) {
 +        free_texture_slots_.push_back(std::move(slot));
 +      }
@@ -2721,11 +4775,15 @@ index 0000000..8dcab58
 +ExternalVideoSource::CreateTextureSlotOnSequence(
 +    int32_t buffer_id,
 +    const gfx::Size& coded_size,
++    SlotPixelFormat slot_format,
 +    const gfx::ColorSpace& color_space) {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 +  if (!sii_ || !gpu_channel_ || gpu_channel_->IsLost()) {
 +    return nullptr;
 +  }
++
++  const gfx::BufferFormat buf_fmt = ToGfxBufferFormat(slot_format);
++  const bool biplanar = IsBiplanarSlotFormat(slot_format);
 +
 +#if BUILDFLAG(IS_WIN)
 +  if (!d3d12_uploader_ || !d3d12_uploader_->IsDeviceHealthy()) {
@@ -2737,23 +4795,21 @@ index 0000000..8dcab58
 +  D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprints[2] = {};
 +  UINT64 total_bytes = 0;
 +  base::win::ScopedHandle shared_handle;
-+  if (!d3d12_uploader_->CreateSharedNV12Texture(
-+          coded_size, &d3d11_texture, &d3d12_resource, footprints, &total_bytes,
-+          &shared_handle)) {
++  if (!d3d12_uploader_->CreateSharedSlotTexture(
++          coded_size, slot_format, &d3d11_texture, &d3d12_resource, footprints,
++          &total_bytes, &shared_handle)) {
 +    return nullptr;
 +  }
 +
-+  static std::atomic<int32_t> g_next_dxgi_gmb_id{1};
 +  gfx::GpuMemoryBufferHandle gmb_handle;
 +  gmb_handle.type = gfx::DXGI_SHARED_HANDLE;
-+  gmb_handle.id = gfx::GpuMemoryBufferId(
-+      g_next_dxgi_gmb_id.fetch_add(1, std::memory_order_relaxed));
++  gmb_handle.id = NextGpuMemoryBufferId();
 +  gmb_handle.dxgi_handle = std::move(shared_handle);
 +  gmb_handle.dxgi_token = gfx::DXGIHandleToken();
 +
 +  auto gmb_dxgi = gpu::GpuMemoryBufferImplDXGI::CreateFromHandle(
-+      std::move(gmb_handle), coded_size, gfx::BufferFormat::YUV_420_BIPLANAR,
-+      gfx::BufferUsage::GPU_READ, base::DoNothing(), nullptr, nullptr);
++      std::move(gmb_handle), coded_size, buf_fmt, gfx::BufferUsage::GPU_READ,
++      base::DoNothing(), nullptr, nullptr);
 +  if (!gmb_dxgi) {
 +    return nullptr;
 +  }
@@ -2763,17 +4819,26 @@ index 0000000..8dcab58
 +      gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
 +
 +  auto slot = base::MakeRefCounted<TextureSlot>(
-+      buffer_id, coded_size, static_cast<uint32_t>(GL_TEXTURE_2D),
++      buffer_id, coded_size, slot_format, static_cast<uint32_t>(GL_TEXTURE_2D),
 +      /*overlay_capable=*/true);
-+  slot->mailbox_y = sii_->CreateSharedImage(
-+      gmb_dxgi.get(), nullptr, gfx::BufferPlane::Y, color_space,
-+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kUsage);
-+  slot->mailbox_uv = sii_->CreateSharedImage(
-+      gmb_dxgi.get(), nullptr, gfx::BufferPlane::UV, color_space,
-+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kUsage);
-+  if (slot->mailbox_y.IsZero() || slot->mailbox_uv.IsZero()) {
-+    DestroySlotSharedImagesOnSequence(*slot);
-+    return nullptr;
++  if (biplanar) {
++    slot->mailbox_y = sii_->CreateSharedImage(
++        gmb_dxgi.get(), nullptr, gfx::BufferPlane::Y, color_space,
++        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kUsage);
++    slot->mailbox_uv = sii_->CreateSharedImage(
++        gmb_dxgi.get(), nullptr, gfx::BufferPlane::UV, color_space,
++        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kUsage);
++    if (slot->mailbox_y.IsZero() || slot->mailbox_uv.IsZero()) {
++      DestroySlotSharedImagesOnSequence(*slot);
++      return nullptr;
++    }
++  } else {
++    slot->mailbox_y = sii_->CreateSharedImage(
++        gmb_dxgi.get(), nullptr, gfx::BufferPlane::DEFAULT, color_space,
++        kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, kUsage);
++    if (slot->mailbox_y.IsZero()) {
++      return nullptr;
++    }
 +  }
 +
 +  slot->uploader = d3d12_uploader_;
@@ -2794,8 +4859,7 @@ index 0000000..8dcab58
 +      linux_use_scanout_gmb_ ? gfx::BufferUsage::SCANOUT_CPU_READ_WRITE
 +                             : gfx::BufferUsage::GPU_READ_CPU_READ_WRITE;
 +  auto gmb = gmb_manager_->CreateGpuMemoryBuffer(
-+      coded_size, gfx::BufferFormat::YUV_420_BIPLANAR, gmb_usage,
-+      gpu::kNullSurfaceHandle, nullptr);
++      coded_size, buf_fmt, gmb_usage, gpu::kNullSurfaceHandle, nullptr);
 +  if (!gmb || gmb->GetType() != gfx::NATIVE_PIXMAP) {
 +    return nullptr;
 +  }
@@ -2807,34 +4871,395 @@ index 0000000..8dcab58
 +    si_usage |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
 +  }
 +
++  const gfx::BufferFormat plane0_fmt =
++      biplanar ? gfx::BufferFormat::R_8 : buf_fmt;
++  const gfx::BufferPlane plane0 =
++      biplanar ? gfx::BufferPlane::Y : gfx::BufferPlane::DEFAULT;
 +  const uint32_t target =
-+      gpu::NativeBufferNeedsPlatformSpecificTextureTarget(
-+          gfx::BufferFormat::R_8, gfx::BufferPlane::Y)
++      gpu::NativeBufferNeedsPlatformSpecificTextureTarget(plane0_fmt, plane0)
 +          ? gpu::GetPlatformSpecificTextureTarget()
 +          : static_cast<uint32_t>(GL_TEXTURE_2D);
 +
-+  auto slot = base::MakeRefCounted<TextureSlot>(buffer_id, coded_size, target,
-+                                                linux_use_scanout_gmb_);
-+  slot->mailbox_y = sii_->CreateSharedImage(
-+      gmb.get(), gmb_manager_, gfx::BufferPlane::Y, color_space,
-+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, si_usage);
-+  slot->mailbox_uv = sii_->CreateSharedImage(
-+      gmb.get(), gmb_manager_, gfx::BufferPlane::UV, color_space,
-+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, si_usage);
-+  if (slot->mailbox_y.IsZero() || slot->mailbox_uv.IsZero()) {
-+    DestroySlotSharedImagesOnSequence(*slot);
-+    return nullptr;
++  auto slot = base::MakeRefCounted<TextureSlot>(
++      buffer_id, coded_size, slot_format, target, linux_use_scanout_gmb_);
++  if (biplanar) {
++    slot->mailbox_y = sii_->CreateSharedImage(
++        gmb.get(), gmb_manager_, gfx::BufferPlane::Y, color_space,
++        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, si_usage);
++    slot->mailbox_uv = sii_->CreateSharedImage(
++        gmb.get(), gmb_manager_, gfx::BufferPlane::UV, color_space,
++        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, si_usage);
++    if (slot->mailbox_y.IsZero() || slot->mailbox_uv.IsZero()) {
++      DestroySlotSharedImagesOnSequence(*slot);
++      return nullptr;
++    }
++  } else {
++    slot->mailbox_y = sii_->CreateSharedImage(
++        gmb.get(), gmb_manager_, gfx::BufferPlane::DEFAULT, color_space,
++        kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, si_usage);
++    if (slot->mailbox_y.IsZero()) {
++      return nullptr;
++    }
 +  }
 +
 +  slot->gmb = std::move(gmb);
 +  return slot;
 +
++#elif BUILDFLAG(IS_MAC)
++  if (!gmb_manager_) {
++    return nullptr;
++  }
++
++  gfx::ScopedIOSurface io_surface(
++      gfx::CreateIOSurface(coded_size, buf_fmt, /*should_clear=*/false));
++  if (!io_surface) {
++    return nullptr;
++  }
++
++  gfx::GpuMemoryBufferHandle gmb_handle;
++  gmb_handle.type = gfx::IO_SURFACE_BUFFER;
++  gmb_handle.id = NextGpuMemoryBufferId();
++  gmb_handle.io_surface = io_surface;
++
++  auto gmb_iosurface = gpu::GpuMemoryBufferImplIOSurface::CreateFromHandle(
++      gmb_handle, coded_size, buf_fmt, gfx::BufferUsage::SCANOUT_VEA_CPU_READ,
++      base::DoNothing());
++  if (!gmb_iosurface) {
++    return nullptr;
++  }
++
++  constexpr uint32_t kMacUsage =
++      gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_RASTER |
++      gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT |
++      gpu::SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX;
++  const uint32_t target = gpu::GetPlatformSpecificTextureTarget();
++
++  auto slot = base::MakeRefCounted<TextureSlot>(
++      buffer_id, coded_size, slot_format, target, /*overlay_capable=*/true);
++  if (biplanar) {
++    slot->mailbox_y = sii_->CreateSharedImage(
++        gmb_iosurface.get(), gmb_manager_, gfx::BufferPlane::Y, color_space,
++        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kMacUsage);
++    slot->mailbox_uv = sii_->CreateSharedImage(
++        gmb_iosurface.get(), gmb_manager_, gfx::BufferPlane::UV, color_space,
++        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kMacUsage);
++    if (slot->mailbox_y.IsZero() || slot->mailbox_uv.IsZero()) {
++      DestroySlotSharedImagesOnSequence(*slot);
++      return nullptr;
++    }
++  } else {
++    slot->mailbox_y = sii_->CreateSharedImage(
++        gmb_iosurface.get(), gmb_manager_, gfx::BufferPlane::DEFAULT,
++        color_space, kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, kMacUsage);
++    if (slot->mailbox_y.IsZero()) {
++      return nullptr;
++    }
++  }
++
++  slot->io_surface = std::move(io_surface);
++  slot->gmb_iosurface = std::move(gmb_iosurface);
++  return slot;
 +#else
 +  (void)buffer_id;
 +  (void)coded_size;
++  (void)slot_format;
 +  (void)color_space;
++  (void)buf_fmt;
++  (void)biplanar;
 +  return nullptr;
 +#endif
++}
++
++void ExternalVideoSource::SubmitImportedGpuFrameOnSequence(
++    std::unique_ptr<ImportedGpuPayload> payload) {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  if (!payload) {
++    return;
++  }
++
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_ || mode_ != BackendMode::kTexture ||
++        !texture_device_.is_bound()) {
++      return;
++    }
++    has_completed_initial_setup_ = true;
++  }
++
++  if (!gpu_channel_ || gpu_channel_->IsLost() || !sii_) {
++    return;
++  }
++
++  const ImportedCacheKey key{payload->surface_key, payload->coded_size,
++                             payload->slot_format};
++  scoped_refptr<TextureSlot> slot;
++
++  if (payload->surface_key != 0) {
++    for (auto it = imported_lru_slots_.begin(); it != imported_lru_slots_.end();
++         ++it) {
++      if ((*it)->import_key == key && !(*it)->in_use_by_consumer) {
++        slot = *it;
++        imported_lru_slots_.erase(it);
++        imported_lru_slots_.push_front(slot);
++        break;
++      }
++    }
++  }
++
++  const gfx::BufferFormat buf_fmt = ToGfxBufferFormat(payload->slot_format);
++  const bool biplanar = IsBiplanarSlotFormat(payload->slot_format);
++
++  if (!slot) {
++    const bool cacheable = (payload->surface_key != 0);
++    const int32_t new_id = next_texture_buffer_id_++;
++
++#if BUILDFLAG(IS_WIN)
++    if (!payload->dxgi_nt_handle.IsValid()) {
++      return;
++    }
++    gfx::GpuMemoryBufferHandle gmb_handle;
++    gmb_handle.type = gfx::DXGI_SHARED_HANDLE;
++    gmb_handle.id = NextGpuMemoryBufferId();
++    gmb_handle.dxgi_handle = std::move(payload->dxgi_nt_handle);
++    gmb_handle.dxgi_token = gfx::DXGIHandleToken();
++
++    auto gmb_dxgi = gpu::GpuMemoryBufferImplDXGI::CreateFromHandle(
++        std::move(gmb_handle), payload->coded_size, buf_fmt,
++        gfx::BufferUsage::GPU_READ, base::DoNothing(), nullptr, nullptr);
++    if (!gmb_dxgi) {
++      return;
++    }
++    constexpr uint32_t kUsage =
++        gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_RASTER |
++        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
++
++    slot = base::MakeRefCounted<TextureSlot>(
++        new_id, payload->coded_size, payload->slot_format,
++        static_cast<uint32_t>(GL_TEXTURE_2D), /*overlay_capable=*/true,
++        /*imported=*/true, cacheable);
++    slot->import_key = key;
++    if (biplanar) {
++      slot->mailbox_y = sii_->CreateSharedImage(
++          gmb_dxgi.get(), nullptr, gfx::BufferPlane::Y, payload->color_space,
++          kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kUsage);
++      slot->mailbox_uv = sii_->CreateSharedImage(
++          gmb_dxgi.get(), nullptr, gfx::BufferPlane::UV, payload->color_space,
++          kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kUsage);
++      if (slot->mailbox_y.IsZero() || slot->mailbox_uv.IsZero()) {
++        DestroySlotSharedImagesOnSequence(*slot);
++        return;
++      }
++    } else {
++      slot->mailbox_y = sii_->CreateSharedImage(
++          gmb_dxgi.get(), nullptr, gfx::BufferPlane::DEFAULT,
++          payload->color_space, kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType,
++          kUsage);
++      if (slot->mailbox_y.IsZero()) {
++        return;
++      }
++    }
++    slot->gmb_dxgi = std::move(gmb_dxgi);
++
++#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++    if (payload->native_pixmap_handle.planes.empty()) {
++      return;
++    }
++    auto gmb = std::make_unique<ExternalNativePixmapGmbImpl>(
++        NextGpuMemoryBufferId(), payload->coded_size, buf_fmt,
++        std::move(payload->native_pixmap_handle));
++    constexpr uint32_t kUsage = gpu::SHARED_IMAGE_USAGE_GLES2 |
++                                gpu::SHARED_IMAGE_USAGE_RASTER |
++                                gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
++    const gfx::BufferFormat plane0_fmt =
++        biplanar ? gfx::BufferFormat::R_8 : buf_fmt;
++    const gfx::BufferPlane plane0 =
++        biplanar ? gfx::BufferPlane::Y : gfx::BufferPlane::DEFAULT;
++    const uint32_t target =
++        gpu::NativeBufferNeedsPlatformSpecificTextureTarget(plane0_fmt, plane0)
++            ? gpu::GetPlatformSpecificTextureTarget()
++            : static_cast<uint32_t>(GL_TEXTURE_2D);
++
++    slot = base::MakeRefCounted<TextureSlot>(
++        new_id, payload->coded_size, payload->slot_format, target,
++        /*overlay_capable=*/false, /*imported=*/true, cacheable);
++    slot->import_key = key;
++    if (biplanar) {
++      slot->mailbox_y = sii_->CreateSharedImage(
++          gmb.get(), gmb_manager_, gfx::BufferPlane::Y, payload->color_space,
++          kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kUsage);
++      slot->mailbox_uv = sii_->CreateSharedImage(
++          gmb.get(), gmb_manager_, gfx::BufferPlane::UV, payload->color_space,
++          kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kUsage);
++      if (slot->mailbox_y.IsZero() || slot->mailbox_uv.IsZero()) {
++        DestroySlotSharedImagesOnSequence(*slot);
++        return;
++      }
++    } else {
++      slot->mailbox_y = sii_->CreateSharedImage(
++          gmb.get(), gmb_manager_, gfx::BufferPlane::DEFAULT,
++          payload->color_space, kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType,
++          kUsage);
++      if (slot->mailbox_y.IsZero()) {
++        return;
++      }
++    }
++    slot->gmb = std::move(gmb);
++
++#elif BUILDFLAG(IS_MAC)
++    if (!payload->io_surface || !gmb_manager_) {
++      return;
++    }
++    gfx::GpuMemoryBufferHandle gmb_handle;
++    gmb_handle.type = gfx::IO_SURFACE_BUFFER;
++    gmb_handle.id = NextGpuMemoryBufferId();
++    gmb_handle.io_surface = payload->io_surface;
++
++    auto gmb_iosurface = gpu::GpuMemoryBufferImplIOSurface::CreateFromHandle(
++        gmb_handle, payload->coded_size, buf_fmt,
++        gfx::BufferUsage::SCANOUT_VEA_CPU_READ, base::DoNothing());
++    if (!gmb_iosurface) {
++      return;
++    }
++
++    constexpr uint32_t kMacUsage =
++        gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_RASTER |
++        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT |
++        gpu::SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX;
++    const uint32_t target = gpu::GetPlatformSpecificTextureTarget();
++
++    slot = base::MakeRefCounted<TextureSlot>(
++        new_id, payload->coded_size, payload->slot_format, target,
++        /*overlay_capable=*/true, /*imported=*/true, cacheable);
++    slot->import_key = key;
++    if (biplanar) {
++      slot->mailbox_y = sii_->CreateSharedImage(
++          gmb_iosurface.get(), gmb_manager_, gfx::BufferPlane::Y,
++          payload->color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
++          kMacUsage);
++      slot->mailbox_uv = sii_->CreateSharedImage(
++          gmb_iosurface.get(), gmb_manager_, gfx::BufferPlane::UV,
++          payload->color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
++          kMacUsage);
++      if (slot->mailbox_y.IsZero() || slot->mailbox_uv.IsZero()) {
++        DestroySlotSharedImagesOnSequence(*slot);
++        return;
++      }
++    } else {
++      slot->mailbox_y = sii_->CreateSharedImage(
++          gmb_iosurface.get(), gmb_manager_, gfx::BufferPlane::DEFAULT,
++          payload->color_space, kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType,
++          kMacUsage);
++      if (slot->mailbox_y.IsZero()) {
++        return;
++      }
++    }
++    slot->io_surface = std::move(payload->io_surface);
++    slot->gmb_iosurface = std::move(gmb_iosurface);
++#else
++    (void)buf_fmt;
++    (void)biplanar;
++    return;
++#endif
++
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++    if (payload->sync_fence_fd.is_valid()) {
++      gfx::GpuFenceHandle fh;
++      fh.owned_fd = std::move(payload->sync_fence_fd);
++      auto fence = std::make_unique<gfx::GpuFence>(std::move(fh));
++      sii_->UpdateSharedImage(gpu::SyncToken(), std::move(fence),
++                              slot->mailbox_y);
++    }
++#endif
++
++    const gpu::SyncToken sync_token = sii_->GenVerifiedSyncToken();
++    if (!sync_token.HasData() || gpu_channel_->IsLost()) {
++      DestroySlotSharedImagesOnSequence(*slot);
++      return;
++    }
++    RegisterSlotMailboxesOnSequence(*slot, sync_token);
++    if (cacheable) {
++      imported_lru_slots_.push_front(slot);
++      EvictIdleImportedSlotsIfNeededOnSequence();
++    }
++  } else {
++    // Existing cached SharedImage hit: notify GPU service of updated content.
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++    if (payload->sync_fence_fd.is_valid()) {
++      gfx::GpuFenceHandle fh;
++      fh.owned_fd = std::move(payload->sync_fence_fd);
++      auto fence = std::make_unique<gfx::GpuFence>(std::move(fh));
++      sii_->UpdateSharedImage(gpu::SyncToken(), std::move(fence),
++                              slot->mailbox_y);
++      if (biplanar) {
++        sii_->UpdateSharedImage(gpu::SyncToken(), slot->mailbox_uv);
++      }
++    } else {
++      sii_->UpdateSharedImage(gpu::SyncToken(), slot->mailbox_y);
++      if (biplanar) {
++        sii_->UpdateSharedImage(gpu::SyncToken(), slot->mailbox_uv);
++      }
++    }
++    sii_->Flush();
++#elif BUILDFLAG(IS_MAC)
++    sii_->UpdateSharedImage(gpu::SyncToken(), slot->mailbox_y);
++    if (biplanar) {
++      sii_->UpdateSharedImage(gpu::SyncToken(), slot->mailbox_uv);
++    }
++    sii_->Flush();
++#endif
++  }
++
++  slot->in_use_by_consumer = true;
++  {
++    base::AutoLock lock(lock_);
++    if (shut_down_ || mode_ != BackendMode::kTexture ||
++        !texture_device_.is_bound()) {
++      slot->in_use_by_consumer = false;
++      return;
++    }
++    slot->submit_seq = ++next_submit_seq_;
++    slot->in_flight_since = base::TimeTicks::Now();
++    slot->dma_in_progress = false;
++    slot->release_runner = std::move(payload->release_runner);
++    in_flight_texture_slots_[slot->buffer_id] = slot;
++  }
++
++  media::mojom::VideoFrameInfoPtr info = media::mojom::VideoFrameInfo::New();
++  info->timestamp = base::Microseconds(payload->timestamp_us);
++  info->metadata.frame_rate = max_fps_;
++  info->metadata.reference_time = payload->reference_time;
++  info->metadata.allow_overlay = slot->allow_overlay;
++  info->metadata.read_lock_fences_enabled = true;
++  info->pixel_format = ToMediaVideoPixelFormat(payload->slot_format);
++  info->coded_size = payload->coded_size;
++  info->visible_rect = payload->visible_rect;
++  info->is_premapped = false;
++  info->color_space = payload->color_space;
++  texture_device_->OnFrameReadyInBuffer(slot->buffer_id, std::move(info));
++}
++
++void ExternalVideoSource::EvictIdleImportedSlotsIfNeededOnSequence() {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  while (imported_lru_slots_.size() > kMaxImportedLruSlots) {
++    bool evicted = false;
++    for (auto it = imported_lru_slots_.rbegin();
++         it != imported_lru_slots_.rend(); ++it) {
++      if (!(*it)->in_use_by_consumer) {
++        scoped_refptr<TextureSlot> victim = *it;
++        imported_lru_slots_.erase(std::next(it).base());
++        if (registered_texture_buffer_ids_.erase(victim->buffer_id) > 0 &&
++            texture_device_.is_bound()) {
++          texture_device_->OnBufferRetired(victim->buffer_id);
++        }
++        DestroySlotSharedImagesOnSequence(*victim);
++        evicted = true;
++        break;
++      }
++    }
++    if (!evicted) {
++      break;
++    }
++  }
 +}
 +
 +void ExternalVideoSource::DestroySlotSharedImagesOnSequence(
@@ -2857,16 +5282,20 @@ index 0000000..8dcab58
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 +  std::deque<scoped_refptr<TextureSlot>> free_slots;
 +  std::map<int32_t, scoped_refptr<TextureSlot>> in_flight_slots;
++  std::unique_ptr<ColdStartGpuFrame> cold_gpu;
 +  {
 +    base::AutoLock lock(lock_);
 +    free_slots.swap(free_texture_slots_);
 +    in_flight_slots.swap(in_flight_texture_slots_);
++    cold_gpu = std::move(cold_start_gpu_frame_);
 +    texture_pool_coded_size_ = gfx::Size();
 +    texture_alloc_in_flight_ = false;
 +    reclaim_in_flight_ = false;
 +  }
++  cold_gpu.reset();
 +
 +  for (const auto& slot : free_slots) {
++    slot->release_runner.RunNow();
 +    if (retire_on_device && texture_device_.is_bound() &&
 +        registered_texture_buffer_ids_.erase(slot->buffer_id) > 0) {
 +      texture_device_->OnBufferRetired(slot->buffer_id);
@@ -2874,13 +5303,27 @@ index 0000000..8dcab58
 +    DestroySlotSharedImagesOnSequence(*slot);
 +  }
 +  for (const auto& [id, slot] : in_flight_slots) {
++    slot->release_runner.RunNow();
++    slot->in_use_by_consumer = false;
 +    DestroySlotSharedImagesOnSequence(*slot);
 +  }
++  for (const auto& lru_slot : imported_lru_slots_) {
++    lru_slot->release_runner.RunNow();
++    if (in_flight_slots.find(lru_slot->buffer_id) == in_flight_slots.end()) {
++      if (retire_on_device && texture_device_.is_bound() &&
++          registered_texture_buffer_ids_.erase(lru_slot->buffer_id) > 0) {
++        texture_device_->OnBufferRetired(lru_slot->buffer_id);
++      }
++      DestroySlotSharedImagesOnSequence(*lru_slot);
++    }
++  }
++  imported_lru_slots_.clear();
 +  registered_texture_buffer_ids_.clear();
 +}
 +
 +void ExternalVideoSource::SubmitTextureFrameOnSequence(
 +    int32_t buffer_id,
++    SlotPixelFormat slot_format,
 +    gfx::Size coded_size,
 +    gfx::Rect visible_rect,
 +    int64_t timestamp_us,
@@ -2889,11 +5332,16 @@ index 0000000..8dcab58
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 +
 +  scoped_refptr<TextureSlot> slot;
++  ScopedGpuReleaseRunner orphan_release;
 +  {
 +    base::AutoLock lock(lock_);
 +    if (shut_down_ || mode_ != BackendMode::kTexture ||
 +        !texture_device_.is_bound()) {
-+      in_flight_texture_slots_.erase(buffer_id);
++      auto it = in_flight_texture_slots_.find(buffer_id);
++      if (it != in_flight_texture_slots_.end()) {
++        orphan_release = std::move(it->second->release_runner);
++        in_flight_texture_slots_.erase(it);
++      }
 +      return;
 +    }
 +    auto it = in_flight_texture_slots_.find(buffer_id);
@@ -2904,16 +5352,19 @@ index 0000000..8dcab58
 +    it->second->in_flight_since = base::TimeTicks::Now();
 +    slot = it->second;
 +  }
++  orphan_release.RunNow();
 +
 +  if (!gpu_channel_ || gpu_channel_->IsLost()) {
 +    FallbackToSharedMemoryOnSequence("GPU channel lost during frame submit");
 +    return;
 +  }
 +
-+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 +  if (sii_ && slot) {
 +    sii_->UpdateSharedImage(gpu::SyncToken(), slot->mailbox_y);
-+    sii_->UpdateSharedImage(gpu::SyncToken(), slot->mailbox_uv);
++    if (!slot->mailbox_uv.IsZero()) {
++      sii_->UpdateSharedImage(gpu::SyncToken(), slot->mailbox_uv);
++    }
 +    sii_->Flush();
 +  }
 +#endif
@@ -2924,7 +5375,7 @@ index 0000000..8dcab58
 +  info->metadata.reference_time = reference_time;
 +  info->metadata.allow_overlay = slot->allow_overlay;
 +  info->metadata.read_lock_fences_enabled = true;
-+  info->pixel_format = media::PIXEL_FORMAT_NV12;
++  info->pixel_format = ToMediaVideoPixelFormat(slot_format);
 +  info->coded_size = coded_size;
 +  info->visible_rect = visible_rect;
 +  info->is_premapped = false;
@@ -2936,16 +5387,22 @@ index 0000000..8dcab58
 +    int32_t buffer_id,
 +    const char* reason) {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  ScopedGpuReleaseRunner release_runner;
 +  {
 +    base::AutoLock lock(lock_);
-+    in_flight_texture_slots_.erase(buffer_id);
++    auto it = in_flight_texture_slots_.find(buffer_id);
++    if (it != in_flight_texture_slots_.end()) {
++      release_runner = std::move(it->second->release_runner);
++      in_flight_texture_slots_.erase(it);
++    }
 +  }
-+  FallbackToSharedMemoryOnSequence(reason ? reason
-+                                          : "GPU NV12 DMA upload failed");
++  release_runner.RunNow();
++  FallbackToSharedMemoryOnSequence(reason ? reason : "GPU upload failed");
 +}
 +
 +void ExternalVideoSource::ReturnTransientDroppedSlot(int32_t buffer_id) {
 +  scoped_refptr<TextureSlot> stale_slot;
++  ScopedGpuReleaseRunner release_runner;
 +  {
 +    base::AutoLock lock(lock_);
 +    auto it = in_flight_texture_slots_.find(buffer_id);
@@ -2955,25 +5412,31 @@ index 0000000..8dcab58
 +    scoped_refptr<TextureSlot> slot = std::move(it->second);
 +    in_flight_texture_slots_.erase(it);
 +    slot->dma_in_progress = false;
-+    if (!shut_down_ && mode_ == BackendMode::kTexture &&
-+        slot->coded_size == texture_pool_coded_size_) {
++    release_runner = std::move(slot->release_runner);
++    if (!shut_down_ && mode_ == BackendMode::kTexture && !slot->is_imported &&
++        slot->coded_size == texture_pool_coded_size_ &&
++        slot->slot_format == texture_pool_format_) {
 +      free_texture_slots_.push_back(std::move(slot));
-+      return;
++    } else {
++      stale_slot = std::move(slot);
 +    }
-+    stale_slot = std::move(slot);
 +  }
++  release_runner.RunNow();
 +  if (stale_slot) {
 +    task_runner_->PostTask(
 +        FROM_HERE,
 +        base::BindOnce(
 +            [](scoped_refptr<ExternalVideoSource> self,
 +               scoped_refptr<TextureSlot> s) {
-+              if (self->registered_texture_buffer_ids_.erase(s->buffer_id) >
-+                      0 &&
-+                  self->texture_device_.is_bound()) {
-+                self->texture_device_->OnBufferRetired(s->buffer_id);
++              s->in_use_by_consumer = false;
++              if (!s->cache_in_lru) {
++                if (self->registered_texture_buffer_ids_.erase(s->buffer_id) >
++                        0 &&
++                    self->texture_device_.is_bound()) {
++                  self->texture_device_->OnBufferRetired(s->buffer_id);
++                }
++                self->DestroySlotSharedImagesOnSequence(*s);
 +              }
-+              self->DestroySlotSharedImagesOnSequence(*s);
 +            },
 +            base::WrapRefCounted(this), std::move(stale_slot)));
 +  }
@@ -2982,35 +5445,54 @@ index 0000000..8dcab58
 +void ExternalVideoSource::OnFinishedConsumingBuffer(int32_t buffer_id) {
 +  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 +
-+  scoped_refptr<TextureSlot> stale_slot;
++  scoped_refptr<TextureSlot> finished_slot;
++  ScopedGpuReleaseRunner release_runner;
++  bool return_to_pool = false;
++  bool keep_in_lru = false;
 +  {
 +    base::AutoLock lock(lock_);
 +    auto it = in_flight_texture_slots_.find(buffer_id);
 +    if (it == in_flight_texture_slots_.end()) {
 +      return;
 +    }
-+    scoped_refptr<TextureSlot> slot = std::move(it->second);
++    finished_slot = std::move(it->second);
 +    in_flight_texture_slots_.erase(it);
-+    slot->dma_in_progress = false;
-+    if (slot->submit_seq > last_completed_seq_) {
-+      last_completed_seq_ = slot->submit_seq;
++    finished_slot->dma_in_progress = false;
++    release_runner = std::move(finished_slot->release_runner);
++    if (finished_slot->submit_seq > last_completed_seq_) {
++      last_completed_seq_ = finished_slot->submit_seq;
 +    }
 +
-+    if (!shut_down_ && mode_ == BackendMode::kTexture &&
-+        slot->coded_size == texture_pool_coded_size_) {
-+      free_texture_slots_.push_back(std::move(slot));
++    if (!finished_slot->is_imported && !shut_down_ &&
++        mode_ == BackendMode::kTexture &&
++        finished_slot->coded_size == texture_pool_coded_size_ &&
++        finished_slot->slot_format == texture_pool_format_) {
++      free_texture_slots_.push_back(finished_slot);
++      return_to_pool = true;
++    } else if (finished_slot->is_imported && finished_slot->cache_in_lru &&
++               !shut_down_ && mode_ == BackendMode::kTexture) {
++      keep_in_lru = true;
++    }
++  }
++
++  release_runner.RunNow();
++  if (return_to_pool || !finished_slot) {
++    return;
++  }
++
++  if (finished_slot->is_imported) {
++    finished_slot->in_use_by_consumer = false;
++    if (keep_in_lru) {
++      EvictIdleImportedSlotsIfNeededOnSequence();
 +      return;
 +    }
-+    stale_slot = std::move(slot);
 +  }
 +
-+  if (stale_slot) {
-+    if (registered_texture_buffer_ids_.erase(stale_slot->buffer_id) > 0 &&
-+        texture_device_.is_bound()) {
-+      texture_device_->OnBufferRetired(stale_slot->buffer_id);
-+    }
-+    DestroySlotSharedImagesOnSequence(*stale_slot);
++  if (registered_texture_buffer_ids_.erase(finished_slot->buffer_id) > 0 &&
++      texture_device_.is_bound()) {
++    texture_device_->OnBufferRetired(finished_slot->buffer_id);
 +  }
++  DestroySlotSharedImagesOnSequence(*finished_slot);
 +}
 +
 +// ---------------------------------------------------------------------------
@@ -3245,6 +5727,7 @@ index 0000000..8dcab58
 +  producer_receiver_.reset();
 +  provider_.reset();
 +
++  std::unique_ptr<ColdStartGpuFrame> cold_gpu;
 +  {
 +    base::AutoLock lock(lock_);
 +    shut_down_ = true;
@@ -3252,8 +5735,13 @@ index 0000000..8dcab58
 +    reserve_in_flight_ = false;
 +    reserved_slots_.clear();
 +    cold_start_frame_ = nullptr;
++    cold_gpu = std::move(cold_start_gpu_frame_);
 +    shmem_buffers_.clear();
++#if BUILDFLAG(IS_WIN)
++    d3d12_uploader_shared_.reset();
++#endif
 +  }
++  cold_gpu.reset();
 +}
 +
 +void ExternalVideoSource::OnProviderError() {
@@ -3330,6 +5818,14 @@ index 0000000..8dcab58
 +             : 0;
 +}
 +
++CEF_EXPORT int cef_external_video_push_gpu_frame(
++    cef_external_video_t* handle,
++    const cef_external_video_gpu_frame_t* frame) {
++  if (!handle || !handle->source || !frame)
++    return 0;
++  return handle->source->PushGpuFrame(*frame) ? 1 : 0;
++}
++
 +CEF_EXPORT void cef_external_video_destroy(cef_external_video_t* handle) {
 +  if (!handle)
 +    return;
@@ -3339,10 +5835,10 @@ index 0000000..8dcab58
 +}
 diff --git a/cef/libcef/browser/external_video_source.h b/cef/libcef/browser/external_video_source.h
 new file mode 100644
-index 0000000..89a1558
+index 000000000..f362c0383
 --- /dev/null
 +++ b/cef/libcef/browser/external_video_source.h
-@@ -0,0 +1,258 @@
+@@ -0,0 +1,293 @@
 +// Copyright (c) 2026. All rights reserved.
 +//
 +// Implementation of include/cef_external_video.h. See that header for the
@@ -3354,6 +5850,7 @@ index 0000000..89a1558
 +
 +#include <cstdint>
 +#include <deque>
++#include <list>
 +#include <map>
 +#include <memory>
 +#include <set>
@@ -3401,25 +5898,20 @@ index 0000000..89a1558
 +// One external video source registered with Chromium's video capture service.
 +//
 +// Two-tier cross-platform transport architecture:
-+// 1. Hardware GPU NV12 SharedImage path (Primary):
-+//    Registers as a TextureVirtualDevice backed by a 3-slot NV12 SharedImage
-+//    ring:
-+//    - Windows (x86/x64): Allocates keyless shared NT-handle NV12 textures
-+//      (D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED, zero
-+//      IDXGIKeyedMutex stalls in Viz) and uploads via a process-wide D3D12
-+//      D3D12_COMMAND_LIST_TYPE_COPY hardware DMA queue + ID3D12Fence completion
-+//      thread. Uses 0% of the GPU 3D engine in the Browser process while
-+//      bypassing Renderer CPU memory completely.
-+//    - Linux (x86_64 / ARM64): Uses DRM/GBM YUV_420_BIPLANAR NativePixmap
-+//      DMA-BUF GpuMemoryBuffers with non-temporal SIMD writes.
-+// 2. Pre-Reserved SharedMemory path (Automatic Fallback):
++// 1. Hardware GPU SharedImage path (Primary on Windows, Linux, and macOS):
++//    Registers as a TextureVirtualDevice backed by either an internal 3-slot
++//    SharedImage pool (NV12 / BGRA8 / RGBA8 / P010) or an LRU cache of
++//    zero-copy imported OS GPU surfaces (DXGI NT HANDLE, Linux DMA-BUF fd,
++//    macOS IOSurface).
++// 2. Pre-Reserved SharedMemory path (Automatic Fallback for CPU PushFrame):
 +//    Whenever GPU compositing is disabled, software-rendered (SwiftShader /
-+//    WARP / llvmpipe), D3D12/NativePixmap is unavailable, or the GPU channel
-+//    is lost, seamlessly falls back to a SharedMemoryVirtualDevice with
-+//    pre-reserved Mojo slots and AVX2/SSE2/ARM64-NEON non-temporal writes.
++//    WARP / llvmpipe), or the GPU channel is lost, CPU PushFrame() seamlessly
++//    falls back to a SharedMemoryVirtualDevice with pre-reserved Mojo slots and
++//    AVX2/SSE2/ARM64-NEON non-temporal writes.
 +//
 +// Threading:
-+// - Create(), PushFrame() and Shutdown() may be called on any thread.
++// - Create(), PushFrame(), PushGpuFrame() and Shutdown() may be called on any
++//   thread.
 +// - All Mojo and SharedImage lifetime state lives on |task_runner_|.
 +// - The object is ref-counted and always deleted on |task_runner_|.
 +class ExternalVideoSource
@@ -3427,6 +5919,13 @@ index 0000000..89a1558
 +      public video_capture::mojom::Producer,
 +      public video_capture::mojom::VideoFrameAccessHandler {
 + public:
++  enum class SlotPixelFormat {
++    kNV12 = 0,
++    kP010 = 1,
++    kBGRA8 = 2,
++    kRGBA8 = 3,
++  };
++
 +  // Returns nullptr if the arguments are invalid or CEF is not initialized.
 +  static scoped_refptr<ExternalVideoSource> Create(const std::string& device_id,
 +                                                   const std::string& label,
@@ -3436,9 +5935,10 @@ index 0000000..89a1558
 +  ExternalVideoSource(const ExternalVideoSource&) = delete;
 +  ExternalVideoSource& operator=(const ExternalVideoSource&) = delete;
 +
-+  // Streams the frame into an idle GPU texture slot or pre-reserved shared
-+  // memory slot. Drops in O(1) at entry when all downstream slots are busy.
-+  // Returns false only if arguments are invalid or the source is shut down.
++  // Streams a CPU YUV 4:2:0 frame into an idle GPU texture slot or pre-reserved
++  // shared memory slot. Drops in O(1) at entry when all downstream slots are
++  // busy. Returns false only if arguments are invalid or the source is shut
++  // down.
 +  bool PushFrame(const uint8_t* y,
 +                 int y_stride,
 +                 const uint8_t* u,
@@ -3450,7 +5950,15 @@ index 0000000..89a1558
 +                 int64_t timestamp_us,
 +                 const gfx::ColorSpace& color_space);
 +
-+  // Unregisters the device. Further PushFrame() calls are rejected.
++  // Pushes an OS-shared GPU surface (Windows D3D11 shared handle, Linux
++  // DMA-BUF, macOS IOSurface). In copy-on-push mode (release_callback == NULL),
++  // copies into an internal GPU texture slot before returning; in zero-copy
++  // borrow mode (release_callback != NULL), guarantees release_callback is
++  // invoked exactly once whenever this method returns true.
++  bool PushGpuFrame(const cef_external_video_gpu_frame_t& frame);
++
++  // Unregisters the device. Further PushFrame() / PushGpuFrame() calls are
++  // rejected.
 +  void Shutdown();
 +
 +  // video_capture::mojom::Producer implementation (|task_runner_| only).
@@ -3472,8 +5980,12 @@ index 0000000..89a1558
 +    kSharedMemory,
 +  };
 +
++  class ScopedGpuReleaseRunner;
 +  struct SharedBufferSlot;
 +  struct TextureSlot;
++  struct ColdStartGpuFrame;
++  struct ImportedGpuPayload;
++  struct ImportedCacheKey;
 +#if BUILDFLAG(IS_WIN)
 +  class SharedD3D12CopyUploader;
 +#endif
@@ -3507,15 +6019,22 @@ index 0000000..89a1558
 +  scoped_refptr<TextureSlot> CreateTextureSlotOnSequence(
 +      int32_t buffer_id,
 +      const gfx::Size& coded_size,
++      SlotPixelFormat slot_format,
 +      const gfx::ColorSpace& color_space);
++  bool RegisterSlotMailboxesOnSequence(const TextureSlot& slot,
++                                       const gpu::SyncToken& sync_token);
 +  void DestroySlotSharedImagesOnSequence(const TextureSlot& slot);
 +  void ReleaseAllTextureResourcesOnSequence(bool retire_on_device);
 +  void SubmitTextureFrameOnSequence(int32_t buffer_id,
++                                    SlotPixelFormat slot_format,
 +                                    gfx::Size coded_size,
 +                                    gfx::Rect visible_rect,
 +                                    int64_t timestamp_us,
 +                                    base::TimeTicks reference_time,
 +                                    gfx::ColorSpace color_space);
++  void SubmitImportedGpuFrameOnSequence(
++      std::unique_ptr<ImportedGpuPayload> payload);
++  void EvictIdleImportedSlotsIfNeededOnSequence();
 +  void HandleTextureUploadFailureOnSequence(int32_t buffer_id,
 +                                            const char* reason);
 +  void ReturnTransientDroppedSlot(int32_t buffer_id);
@@ -3543,20 +6062,25 @@ index 0000000..89a1558
 +  const gfx::Size max_size_;
 +  const float max_fps_;
 +
-+  // Shared between PushFrame() thread(s) and |task_runner_|.
++  // Shared between PushFrame()/PushGpuFrame() thread(s) and |task_runner_|.
 +  base::Lock lock_;
 +  BackendMode mode_ GUARDED_BY(lock_) = BackendMode::kPendingInit;
 +  gfx::Size desired_coded_size_ GUARDED_BY(lock_);
++  SlotPixelFormat desired_pool_format_ GUARDED_BY(lock_) =
++      SlotPixelFormat::kNV12;
 +  gfx::ColorSpace desired_color_space_ GUARDED_BY(lock_);
 +  // Used only once before the initial pool or shared-memory buffer is ready so
 +  // a single still frame pushed immediately after creation is preserved.
 +  scoped_refptr<media::VideoFrame> cold_start_frame_ GUARDED_BY(lock_);
++  std::unique_ptr<ColdStartGpuFrame> cold_start_gpu_frame_ GUARDED_BY(lock_);
 +  bool has_completed_initial_setup_ GUARDED_BY(lock_) = false;
 +  bool device_ready_ GUARDED_BY(lock_) = false;
 +  bool shut_down_ GUARDED_BY(lock_) = false;
 +
 +  // Texture mode shared state (guarded by |lock_|).
 +  gfx::Size texture_pool_coded_size_ GUARDED_BY(lock_);
++  SlotPixelFormat texture_pool_format_ GUARDED_BY(lock_) =
++      SlotPixelFormat::kNV12;
 +  std::deque<scoped_refptr<TextureSlot>> free_texture_slots_ GUARDED_BY(lock_);
 +  std::map<int32_t, scoped_refptr<TextureSlot>> in_flight_texture_slots_
 +      GUARDED_BY(lock_);
@@ -3564,6 +6088,12 @@ index 0000000..89a1558
 +  uint64_t last_completed_seq_ GUARDED_BY(lock_) = 0;
 +  bool texture_alloc_in_flight_ GUARDED_BY(lock_) = false;
 +  bool reclaim_in_flight_ GUARDED_BY(lock_) = false;
++#if BUILDFLAG(IS_WIN)
++  // Accessed by PushGpuFrame() under |lock_| (or snapshot) so D3D11 shared
++  // textures can be opened and copied in VRAM synchronously before returning.
++  scoped_refptr<SharedD3D12CopyUploader> d3d12_uploader_shared_
++      GUARDED_BY(lock_);
++#endif
 +
 +  // SharedMemory fallback shared state (guarded by |lock_|).
 +  std::map<int32_t, scoped_refptr<SharedBufferSlot>> shmem_buffers_
@@ -3585,6 +6115,7 @@ index 0000000..89a1558
 +  std::unique_ptr<gpu::ClientSharedImageInterface> sii_;
 +  raw_ptr<gpu::GpuMemoryBufferManager> gmb_manager_ = nullptr;
 +  std::set<int32_t> registered_texture_buffer_ids_;
++  std::list<scoped_refptr<TextureSlot>> imported_lru_slots_;
 +  int32_t next_texture_buffer_id_ = 1;
 +#if BUILDFLAG(IS_WIN)
 +  scoped_refptr<SharedD3D12CopyUploader> d3d12_uploader_;
@@ -3602,7 +6133,7 @@ index 0000000..89a1558
 +
 +#endif  // CEF_LIBCEF_BROWSER_EXTERNAL_VIDEO_SOURCE_H_
 diff --git a/cef/tools/cef_api_hash.py b/cef/tools/cef_api_hash.py
-index 39eefa0..13c335d 100644
+index 39eefa075..13c335d85 100644
 --- a/cef/tools/cef_api_hash.py
 +++ b/cef/tools/cef_api_hash.py
 @@ -61,6 +61,7 @@ class cef_api_hash:

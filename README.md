@@ -4,7 +4,7 @@
 
 | 改动 | 说明 |
 |---|---|
-| 外部视频源 `cef_external_video_*` | 宿主进程把自己解码的 YUV 4:2:0 帧（YV12 / I420）推给 CEF，页面用 `<video>` 显示，由 Chromium 自己的合成器渲染，所有 CSS 都能用。本文主要介绍这一项 |
+| 外部视频源 `cef_external_video_*` | 宿主进程把解码后的视频帧（内存 YUV 4:2:0 平面或三端原生共享显存纹理：Windows D3D11、Linux DMA-BUF、macOS IOSurface）推给 CEF，页面用 `<video>` 显示，由 Chromium 合成器渲染，所有 CSS 都能用。本文主要介绍这一项 |
 | H.265 / HEVC 软解 | ffmpeg 增加了 HEVC 解码器和解析器，并去掉了 Main / Main10 profile 的限制 |
 | VS2026 构建 | Chromium 109 原本只支持 VS2017/2019/2022，现在可以用 VS2026（MSVC 14.5x + Windows SDK 10.0.26100）编译 |
 | 不带 cef_sandbox | 分发包中没有 `cef_sandbox.lib`。宿主程序需要设置 `CefSettings.no_sandbox = true`（CMake 里设 `USE_SANDBOX=OFF`）。本版本只适合加载自己的可信页面 |
@@ -90,6 +90,36 @@ int cef_external_video_push_yv12(cef_external_video_t* source, const uint8_t* bu
                                  int64_t timestamp_us,
                                  const cef_external_video_color_t* color);
 ```
+
+#### `cef_external_video_push_gpu_frame`（硬件解码 / 共享显存直推）
+
+当外部解码器或播放库已经在 GPU 显存中完成解码或渲染时，可直接把操作系统共享句柄推给 CEF，避免“显存 → 内存 → 显存”的往返回读：
+
+```c
+int cef_external_video_push_gpu_frame(cef_external_video_t* source,
+                                      const cef_external_video_gpu_frame_t* frame);
+
+// Windows D3D11 同步渲染回调（如海康 PlayM4_RegisterTextureDrawFun）快捷函数：
+// 自动从共享句柄读取尺寸与像素格式，在显存内完成拷贝后再返回。
+int cef_external_video_push_d3d11_texture(cef_external_video_t* source,
+                                          void* hTexture,
+                                          int64_t timestamp_us);
+```
+
+支持三端原生共享显存句柄与像素格式（`NV12`、`P010`、`BGRA8`、`RGBA8`；Windows 与 macOS 传 `CEF_EXT_GPU_FORMAT_AUTO` 可自动识别）：
+
+| 平台 | `handle_type` | 说明 |
+|---|---|---|
+| Windows | `CEF_EXT_GPU_HANDLE_WIN_D3D11` | 支持旧式 `D3D11_RESOURCE_MISC_SHARED`（`GetSharedHandle`）与新式 `D3D11_RESOURCE_MISC_SHARED_NTHANDLE`（`CreateSharedHandle`），自动探测句柄类型并可选支持 `IDXGIKeyedMutex` |
+| Linux | `CEF_EXT_GPU_HANDLE_LINUX_DMABUF` | 支持多平面 `DMA-BUF` `fd`、`stride`、`offset`、`drm_modifier`（含硬件解码器平铺布局）及可选 `sync_fence_fd` |
+| macOS | `CEF_EXT_GPU_HANDLE_MAC_IOSURFACE` | 支持进程内 `IOSurfaceRef` 或跨进程 `IOSurfaceID` |
+
+两种生命周期模式（由 `frame->release_callback` 决定）：
+
+- **显存内同步拷入（`release_callback == NULL`，默认）**：CEF 在函数返回前把外部表面拷入内部 `SharedImage` 槽位（Windows 下通过 GPU 围栏确保拷贝完成且自动修正 `BGRA8`/`RGBA8` 的不透明 Alpha 通道），函数一返回调用方即可立即覆写或复用原纹理，适合 `PlayM4_RegisterTextureDrawFun` 等不提供异步借用锁的回调接口。
+- **零拷贝借用（`release_callback != NULL`）**：在支持的路径（Windows NT Handle、Linux DMA-BUF、macOS IOSurface）下直接导入外部显存表面并按 `surface_key` 做 LRU `SharedImage` 缓存复用；只要函数返回 `1`，当 Chromium 合成器消费完毕（或因下游繁忙丢帧）时必定回调一次 `release_callback(release_ctx)` 归还表面；返回 `0` 时不接管所有权且不会触发回调。
+
+**多显卡设备对齐**：跨 D3D11 设备共享纹理要求播放库与 CEF 运行在同一块物理显卡上。若机器存在核显 + 独显，可查询播放库所用显卡的 `LUID`，并在浏览器进程的 `OnBeforeCommandLineProcessing` 中传入 `--use-adapter-luid=<HighPart>,<LowPart>`（十进制有符号/无符号整数对，如 `--use-adapter-luid=0,59672`），让 CEF 的 GPU 进程绑定到同一块物理显卡。
 
 #### `cef_external_video_destroy`
 
@@ -297,5 +327,5 @@ attachAll();
 
 ## 限制
 
-- 只支持 8bit 4:2:0（YV12/I420）、SDR。没有 HDR，也不支持 10bit。
+- 内存推帧（`cef_external_video_push_frame`）支持 8bit 4:2:0（YV12/I420）；显存推帧（`cef_external_video_push_gpu_frame`）支持 `NV12`、`P010`、`BGRA8`、`RGBA8`（GPU 硬件加速合成开启时可用；若禁用 GPU 硬件加速则仅支持内存推帧自动回退共享内存通道）。
 - 这是实时流：最新一帧立即上屏，没有缓冲，也没有音画同步。音频需要另外处理。
